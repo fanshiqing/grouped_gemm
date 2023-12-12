@@ -10,7 +10,7 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 #         os.environ["TORCH_CUDA_ARCH_LIST"] = "8.0"
 
 
-# cwd = Path(os.path.dirname(os.path.abspath(__file__)))
+cwd = Path(os.path.dirname(os.path.abspath(__file__)))
 # _dc = torch.cuda.get_device_capability()
 # _dc = f"{_dc[0]}{_dc[1]}"
 
