@@ -31,3 +31,7 @@ class GroupedGemm(torch.autograd.Function):
 
 def gmm(a, b, batch_sizes, trans_b=False):
     return GroupedGemm.apply(a, b, batch_sizes, trans_b)
+
+def sinkhorn_kernel(cost, tol=0.0001):
+    return backend.sinkhorn(cost, tol)
+

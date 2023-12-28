@@ -23,7 +23,7 @@ _dc = f"{_dc[0]}{_dc[1]}"
 ext_modules = [
     CUDAExtension(
         "grouped_gemm_backend",
-        ["csrc/ops.cu", "csrc/grouped_gemm.cu"],
+        ["csrc/ops.cu", "csrc/grouped_gemm.cu", "csrc/sinkhorn.cu"],
         include_dirs = [
             f"{cwd}/third_party/cutlass/include/"
         ],
@@ -44,10 +44,10 @@ ext_modules = [
 setup(
     name="grouped_gemm",
     version="0.0.1",
-    author="Trevor Gale",
-    author_email="tgale@stanford.edu",
+    author="Trevor Gale, Shiqing Fan",
+    author_email="tgale@stanford.edu, shiqingf@nvidia.com",
     description="GEMM Grouped",
-    url="https://github.com/tgale06/grouped_gemm",
+    url="https://github.com/fanshiqing/grouped_gemm",
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: BSD License",
