@@ -7,11 +7,11 @@ import unittest
 import torch.cuda.nvtx as nvtx
 
 try:
-  from grouped_gemm import permute, unpermute, groupedgemm
+  from grouped_gemm import permute, unpermute, gmm
 except ImportError:
   print("grouped-gemm toolkit is not installed. Fall back to local import.")
   # For local debug
-  from moe.ops import permute, unpermute, groupedgemm
+  from moe.ops import permute, unpermute, gmm
 
 
 class TestMoeOps(unittest.TestCase):
@@ -142,7 +142,7 @@ class TestMoeOps(unittest.TestCase):
       # shape mismatch test
       # weights = torch.nn.functional.pad(weights, [0, 0, 0, 1])
 
-      gemm_output = groupedgemm(permuted_inputs, weights, tokens_per_expert, transB)
+      gemm_output = gmm(permuted_inputs, weights, tokens_per_expert, transB)
       nvtx.range_pop()
 
       # Reset grad to avoid accumulation
