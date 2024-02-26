@@ -4,6 +4,7 @@
 
 import torch
 import os
+import logging
 from sys import stderr
 
 so_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/build'
@@ -33,7 +34,7 @@ class PermuteMoE(torch.autograd.Function):
     if unpermuted_inputs.is_cpu:
       raise RuntimeError("[Error] The input \"unpermuted_inputs\" of permute op is on the device: CPU!")
     if expert_for_rows.is_cpu:
-      print("[Warning] The input \"expert_for_rows\" of permute op is on the device: CPU!", file=stderr)
+      logging.warning("The input \"expert_for_rows\" of permute op is on the device: CPU!")
       expert_for_rows = expert_for_rows.cuda()
 
     # Shape check
@@ -43,16 +44,15 @@ class PermuteMoE(torch.autograd.Function):
 
     # Data type check
     if expert_for_rows.dtype != torch.int32:
-      print("[Warning] The data type of the input \"expert_for_rows\" of permute op is Int64! "
-            "The recommended type is int32.", file=stderr)
+      logging.warning("The dtype of 'expert_for_rows' is {}, will be casted into torch.int32".format(expert_for_rows.dtype))
       expert_for_rows = expert_for_rows.to(torch.int32)
 
     # Contiguous check
     if not unpermuted_inputs.is_contiguous():
-      print("[Warning] The input \"unpermuted_inputs\" of permute op is discontiguous!", file=stderr)
+      logging.warning("The input \"unpermuted_inputs\" of permute op is discontiguous!")
       unpermuted_inputs = unpermuted_inputs.contiguous()
     if not expert_for_rows.is_contiguous():
-      print("[Warning] The input \"expert_for_rows\" of permute op is discontiguous!", file=stderr)
+      logging.warning("The input \"expert_for_rows\" of permute op is discontiguous!")
       expert_for_rows = expert_for_rows.contiguous()
 
     input_max_token_num = max(max_token_num, unpermuted_inputs.size(0))
@@ -112,10 +112,10 @@ class UnpermuteMoE(torch.autograd.Function):
     if permuted_inputs.is_cpu:
       raise RuntimeError("[Error] The input \"permuted_inputs\" of unpermute op is on the device: CPU!")
     if expert_for_rows.is_cpu:
-      print("[Warning] The input \"expert_for_rows\" of unpermute op is on the device: CPU!", file=stderr)
+      logging.warning("The input \"expert_for_rows\" of unpermute op is on the device: CPU!")
       expert_for_rows = expert_for_rows.cuda()
     if source_row_to_dest_row.is_cpu:
-      print("[Warning] The input \"source_row_to_dest_row\" of unpermute op is on the device: CPU!", file=stderr)
+      logging.warning("The input \"source_row_to_dest_row\" of unpermute op is on the device: CPU!")
       source_row_to_dest_row = source_row_to_dest_row.cuda()
 
     # Shape check
@@ -125,23 +125,22 @@ class UnpermuteMoE(torch.autograd.Function):
 
     # Data type check
     if expert_for_rows.dtype != torch.int32:
-      print("[Warning] The data type of the input \"expert_for_rows\" of unpermute op is Int64! "
-            "The recommended type is int32.", file=stderr)
+      logging.warning("The dtype of 'expert_for_rows' is {}, will be casted into torch.int32".format(expert_for_rows.dtype))
       expert_for_rows = expert_for_rows.to(torch.int32)
     if source_row_to_dest_row.dtype != torch.int32:
-      print("[Warning] The data type of the input \"source_row_to_dest_row\" of unpermute op is Int64! "
-            "The recommended type is int32.", file=stderr)
+      logging.warning("The data type of the input \"source_row_to_dest_row\" of unpermute op is Int64! "
+            "The recommended type is int32.")
       source_row_to_dest_row = source_row_to_dest_row.to(torch.int32)
 
     # Contiguous check
     if not permuted_inputs.is_contiguous():
-      print("[Warning] The input \"permuted_inputs\" of unpermute op is discontiguous!", file=stderr)
+      logging.warning("The input \"permuted_inputs\" of unpermute op is discontiguous!")
       permuted_inputs = permuted_inputs.contiguous()
     if not expert_for_rows.is_contiguous():
-      print("[Warning] The input \"expert_for_rows\" of unpermute op is discontiguous!", file=stderr)
+      logging.warning("The input \"expert_for_rows\" of unpermute op is discontiguous!")
       expert_for_rows = expert_for_rows.contiguous()
     if not source_row_to_dest_row.is_contiguous():
-      print("[Warning] The input \"source_row_to_dest_row\" of unpermute op is discontiguous!", file=stderr)
+      logging.warning("The input \"source_row_to_dest_row\" of unpermute op is discontiguous!")
       source_row_to_dest_row = source_row_to_dest_row.contiguous()
 
     if UnpermuteMoE.max_token_num < max_token_num:
@@ -198,7 +197,7 @@ class GroupedGemmMoE(torch.autograd.Function):
     if weights.is_cpu:
       raise RuntimeError("[Error] The input \"weights\" of groupedgemm op is on the device: CPU!")
     if tokens_per_expert.is_cpu:
-      print("[Warning] The input \"tokens_per_expert\" of groupedgemm op is on the device: CPU!", file=stderr)
+      logging.warning("The input \"tokens_per_expert\" of groupedgemm op is on the device: CPU!")
       tokens_per_expert = tokens_per_expert.cuda()
 
     # Shape check
@@ -216,16 +215,16 @@ class GroupedGemmMoE(torch.autograd.Function):
       raise RuntimeError(f"[Error] groupedgemm op input data type mismatch! "
                          f"\"permuted_inputs\": {permuted_inputs.dtype}, \"weights\": {weights.dtype}.")
     if tokens_per_expert.dtype != torch.int32:
-      print("[Warning] The data type of the input \"tokens_per_expert\" of groupedgemm op is Int64! "
-            "The recommended type is int32.", file=stderr)
+      logging.warning("The data type of the input \"tokens_per_expert\" of groupedgemm op is Int64! "
+            "The recommended type is int32.")
       tokens_per_expert = tokens_per_expert.to(torch.int32)
 
     # Contiguous check
     if not permuted_inputs.is_contiguous():
-      print("[Warning] The input \"permuted_inputs\" of groupedgemm op is discontiguous!", file=stderr)
+      logging.warning("The input \"permuted_inputs\" of groupedgemm op is discontiguous!")
       permuted_inputs = permuted_inputs.contiguous()
     if not weights.is_contiguous():
-      print("[Warning] The input \"weights\" of groupedgemm op is discontiguous!", file=stderr)
+      logging.warning("The input \"weights\" of groupedgemm op is discontiguous!")
       weights = weights.contiguous()
 
     output = torch.ops.moe_unit_ops.moe_group_gemm_op(
