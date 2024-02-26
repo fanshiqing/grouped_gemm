@@ -354,7 +354,8 @@ std::tuple<torch::Tensor, torch::Tensor, std::vector<Tensor>> moe_permute_op(
         throw std::runtime_error("Wrong activation tensor type.");
     }
 
-    cudaStreamSynchronize(stream);
+    /// Removed to align with pytorch
+    // cudaStreamSynchronize(stream);
 
     return std::make_tuple(permuted_output, source_row_to_dest_row, workspace);
 }
@@ -438,7 +439,8 @@ torch::Tensor moe_recover_op(
         throw std::runtime_error("Wrong activation tensor type.");
     }
 
-    cudaStreamSynchronize(stream);
+    /// Removed to align with pytorch
+    // cudaStreamSynchronize(stream);
 
     return unpermuted_output;
 }
