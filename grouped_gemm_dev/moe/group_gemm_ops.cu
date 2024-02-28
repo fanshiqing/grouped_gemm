@@ -179,6 +179,12 @@ Tensor moe_group_gemm_op(Tensor  input_activations,
         default:
             throw std::runtime_error("Wrong activation tensor type.");
     }
+
+    cudaDeviceSynchronize();
+    cudaError_t err{cudaGetLastError()};
+    if (err != cudaSuccess)
+        printf("\nCUDA Runtime Error %d at grouped gemm varM %s:%d: %s\n", err, __FILE__, __LINE__, cudaGetErrorString(err));
+
     return output_tensor;
 }
 
@@ -224,6 +230,13 @@ Tensor moe_group_gemm_backward_op(Tensor input_activations,
         default:
             throw std::runtime_error("Wrong activation tensor type.");
     }
+
+    cudaDeviceSynchronize();
+    cudaError_t err{cudaGetLastError()};
+    if (err != cudaSuccess)
+        printf("\nCUDA Runtime Error %d at grouped gemm varK %s:%d: %s\n", err, __FILE__, __LINE__, cudaGetErrorString(err));
+
+
     return output_tensor;
 }
 
@@ -357,6 +370,11 @@ std::tuple<torch::Tensor, torch::Tensor, std::vector<Tensor>> moe_permute_op(
     /// Removed to align with pytorch
     // cudaStreamSynchronize(stream);
 
+    cudaDeviceSynchronize();
+    cudaError_t err{cudaGetLastError()};
+    if (err != cudaSuccess)
+        printf("\nCUDA Runtime Error %d at permute %s:%d: %s\n", err, __FILE__, __LINE__, cudaGetErrorString(err));
+
     return std::make_tuple(permuted_output, source_row_to_dest_row, workspace);
 }
 
@@ -441,6 +459,12 @@ torch::Tensor moe_recover_op(
 
     /// Removed to align with pytorch
     // cudaStreamSynchronize(stream);
+
+    cudaDeviceSynchronize();
+    cudaError_t err{cudaGetLastError()};
+    if (err != cudaSuccess)
+        printf("\nCUDA Runtime Error %d at recover %s:%d: %s\n", err, __FILE__, __LINE__, cudaGetErrorString(err));
+
 
     return unpermuted_output;
 }
