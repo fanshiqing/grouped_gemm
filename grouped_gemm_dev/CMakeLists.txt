@@ -43,10 +43,23 @@ if torch.cuda.is_available():
   capability = torch.cuda.get_device_capability(device)
   major_arch, minor_arch = capability
   gpu_arch = major_arch * 10 + minor_arch
+  print(gpu_arch)
+else:
+  gpu_arch = 0
   print(gpu_arch)"
                   RESULT_VARIABLE _PYTHON_SUCCESS
-                  OUTPUT_VARIABLE GPU_ARCH)
-  message (STATUS "Autodetected NVIDIA GPU arch: ${GPU_ARCH}")
+                  OUTPUT_VARIABLE GPU_ARCH
+                  ERROR_VARIABLE _PYTHON_ERROR_VALUE)
+  if(NOT _PYTHON_SUCCESS MATCHES 0)
+    message(FATAL_ERROR "Python config failure:\n${_PYTHON_ERROR_VALUE}")
+    return()
+  elseif (GPU_ARCH EQUAL 0)
+     message (WARNING "Device not detected, set GPU_ARCH to 90 as default")
+     set(GPU_ARCH 90)
+  else ()
+    message (STATUS "Autodetected NVIDIA GPU arch: ${GPU_ARCH}")
+  endif()
+
 
   if (GPU_ARCH EQUAL 70)
     add_definitions("-DARCH_70")
@@ -64,6 +77,8 @@ if torch.cuda.is_available():
 
   set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE INTERNAL "No dev warnings")
   set(TORCH_CUDA_ARCH_LIST ${GPU_ARCH_TORCH})
+  message(STATUS "GPU_ARCH_TORCH is set to ${GPU_ARCH_TORCH}")
+  message(STATUS "TORCH_CUDA_ARCH_LIST is set to ${TORCH_CUDA_ARCH_LIST}")
   find_package(Torch REQUIRED)
 
   set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-O0;-lineinfo;-lcudart;--expt-extended-lambda;--expt-relaxed-constexpr;--generate-code=arch=compute_${GPU_ARCH},code=sm_${GPU_ARCH};--use_fast_math;")
