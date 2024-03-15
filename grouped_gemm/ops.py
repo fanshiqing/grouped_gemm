@@ -42,7 +42,6 @@ def sinkhorn_kernel(cost, tol=0.0001):
 class PermuteMoE(torch.autograd.Function):
   
   workspace_fw=None
-  workspace_bw=None
   dtype=None
   max_token_num=0
 
@@ -54,20 +53,20 @@ class PermuteMoE(torch.autograd.Function):
 
     # Device check
     if unpermuted_inputs.is_cpu:
-      raise RuntimeError("The input \"unpermuted_inputs\" of permute op is on the device: CPU!")
+      raise RuntimeError("[Error] The input \"unpermuted_inputs\" of permute op is on the device: CPU!")
     if expert_for_rows.is_cpu:
-        warnings.warn("The input \"expert_for_rows\" of permute op is on the device: CPU!")
-        expert_for_rows = expert_for_rows.cuda()
+      print("[Warning] The input \"expert_for_rows\" of permute op is on the device: CPU!", file=stderr)
+      expert_for_rows = expert_for_rows.cuda()
 
     # Shape check
     if unpermuted_inputs.size(0) != expert_for_rows.size(0):
-      raise RuntimeError(f"permute op input \"expert_for_rows\" shape mismatch! "
+      raise RuntimeError(f"[Error] permute op input \"expert_for_rows\" shape mismatch! "
                          f"Expect {unpermuted_inputs.size(0)}, but got {expert_for_rows.size(0)}.")
 
     # Data type check
     if expert_for_rows.dtype != torch.int32:
-        warnings.warn("Got {} dtype for \"expert_for_rows\", will be casted into torch.int32".format(expert_for_rows.dtype))
-        expert_for_rows = expert_for_rows.to(torch.int32)
+      warnings.warn("Got {} dtype for \"expert_for_rows\", will be casted into torch.int32".format(expert_for_rows.dtype))
+      expert_for_rows = expert_for_rows.to(torch.int32)
 
     # Contiguous check
     if not unpermuted_inputs.is_contiguous():
@@ -77,47 +76,42 @@ class PermuteMoE(torch.autograd.Function):
       print("[Warning] The input \"expert_for_rows\" of permute op is discontiguous!", file=stderr)
       expert_for_rows = expert_for_rows.contiguous()
 
-    if PermuteMoE.max_token_num < max_token_num:
+    input_max_token_num = max(max_token_num, unpermuted_inputs.size(0))
+    if PermuteMoE.max_token_num < input_max_token_num:
       # print("Permute op workspace reset!")
-      PermuteMoE.max_token_num = max_token_num
+      PermuteMoE.max_token_num = input_max_token_num
       PermuteMoE.workspace_fw = []
-      PermuteMoE.workspace_bw = []
 
-    if PermuteMoE.max_token_num < unpermuted_inputs.size(0) or PermuteMoE.dtype != unpermuted_inputs.dtype:
+    if PermuteMoE.dtype != unpermuted_inputs.dtype:
       # print("Permute op workspace reset!")
-      PermuteMoE.max_token_num = unpermuted_inputs.size(0)
       PermuteMoE.dtype = unpermuted_inputs.dtype
       PermuteMoE.workspace_fw = []
-      PermuteMoE.workspace_bw = []
 
-    permuted_inputs, source_row_to_dest_row, PermuteMoE.workspace_fw = backend.permute(
+    permuted_inputs, row_id_map, PermuteMoE.workspace_fw = backend.permute(
       unpermuted_inputs,
       expert_for_rows,
       PermuteMoE.workspace_fw,
       PermuteMoE.max_token_num)
 
-    ctx.source_row_to_dest_row = source_row_to_dest_row
+    ctx.row_id_map = row_id_map
 
-    return permuted_inputs, source_row_to_dest_row
+    return permuted_inputs, row_id_map
 
   @staticmethod
   def backward(ctx, permuted_inputs_grad, _):
     if not permuted_inputs_grad.is_contiguous():
       permuted_inputs_grad = permuted_inputs_grad.contiguous()
-    source_row_to_dest_row = ctx.source_row_to_dest_row
+    row_id_map = ctx.row_id_map
 
-    original_output, PermuteMoE.workspace_bw = backend.unpermute(
+    original_output = backend.unpermute(
       permuted_inputs_grad,
-      source_row_to_dest_row,
-      PermuteMoE.workspace_bw,
-      PermuteMoE.max_token_num)
+      row_id_map)
 
     return original_output, None, None
 
 class UnpermuteMoE(torch.autograd.Function):
 
   workspace_fw=None
-  workspace_bw=None
   dtype=None
   max_token_num=0
   
@@ -125,64 +119,60 @@ class UnpermuteMoE(torch.autograd.Function):
   def forward(ctx,
               permuted_inputs: torch.Tensor,
               expert_for_rows: torch.Tensor,
-              source_row_to_dest_row: torch.Tensor,
+              row_id_map: torch.Tensor,
               max_token_num: int):
 
     # Device check
     if permuted_inputs.is_cpu:
-        raise RuntimeError("The input \"permuted_inputs\" of unpermute op is on the device: CPU!")
+      raise RuntimeError("[Error] The input \"permuted_inputs\" of unpermute op is on the device: CPU!")
     if expert_for_rows.is_cpu:
-        warnings.warn("The input \"expert_for_rows\" of unpermute op is on the device: CPU!")
-        expert_for_rows = expert_for_rows.cuda()
-    if source_row_to_dest_row.is_cpu:
-        warnings.warn("The input \"source_row_to_dest_row\" of unpermute op is on the device: CPU!")
-        source_row_to_dest_row = source_row_to_dest_row.cuda()
+      print("[Warning] The input \"expert_for_rows\" of unpermute op is on the device: CPU!", file=stderr)
+      expert_for_rows = expert_for_rows.cuda()
+    if row_id_map.is_cpu:
+      print("[Warning] The input \"row_id_map\" of unpermute op is on the device: CPU!", file=stderr)
+      row_id_map = row_id_map.cuda()
 
     # Shape check
     if permuted_inputs.size(0) != expert_for_rows.size(0):
-      raise RuntimeError(f"unpermute op input \"expert_for_rows\" shape mismatch! "
+      raise RuntimeError(f"[Error] unpermute op input \"expert_for_rows\" shape mismatch! "
                          f"Expect {permuted_inputs.size(0)}, but got {expert_for_rows.size(0)}.")
 
     # Data type check
     if expert_for_rows.dtype != torch.int32:
-        warnings.warn("Got {} dtype for \"expert_for_rows\", will be casted into torch.int32".format(expert_for_rows.dtype))
-        expert_for_rows = expert_for_rows.to(torch.int32)
-    if source_row_to_dest_row.dtype != torch.int32:
-        warnings.warn("The data type of the input \"source_row_to_dest_row\" of unpermute op is Int64! "
-            "The recommended type is int32.")
-        source_row_to_dest_row = source_row_to_dest_row.to(torch.int32)
+      warnings.warn("Got {} dtype for \"expert_for_rows\", will be casted into torch.int32".format(expert_for_rows.dtype))
+      expert_for_rows = expert_for_rows.to(torch.int32)
+    if row_id_map.dtype != torch.int32:
+      print("[Warning] The data type of the input \"row_id_map\" of unpermute op is int64! "
+            "The recommended type is int32.", file=stderr)
+      row_id_map = row_id_map.to(torch.int32)
 
     # Contiguous check
     if not permuted_inputs.is_contiguous():
-        warnings.warn("The input \"permuted_inputs\" of unpermute op is discontiguous!")
-        permuted_inputs = permuted_inputs.contiguous()
+      print("[Warning] The input \"permuted_inputs\" of unpermute op is discontiguous!", file=stderr)
+      permuted_inputs = permuted_inputs.contiguous()
     if not expert_for_rows.is_contiguous():
-        warnings.warn("The input \"expert_for_rows\" of unpermute op is discontiguous!")
-        expert_for_rows = expert_for_rows.contiguous()
-    if not source_row_to_dest_row.is_contiguous():
-        warnings.warn("The input \"source_row_to_dest_row\" of unpermute op is discontiguous!")
-        source_row_to_dest_row = source_row_to_dest_row.contiguous()
+      print("[Warning] The input \"expert_for_rows\" of unpermute op is discontiguous!", file=stderr)
+      expert_for_rows = expert_for_rows.contiguous()
+    if not row_id_map.is_contiguous():
+      print("[Warning] The input \"row_id_map\" of unpermute op is discontiguous!", file=stderr)
+      row_id_map = row_id_map.contiguous()
 
-    if UnpermuteMoE.max_token_num < max_token_num:
+    input_max_token_num = max(max_token_num, permuted_inputs.size(0))
+    if UnpermuteMoE.max_token_num < input_max_token_num:
       # print("Unpermute op workspace reset!")
-      UnpermuteMoE.max_token_num = max_token_num
+      UnpermuteMoE.max_token_num = input_max_token_num
       UnpermuteMoE.workspace_fw = []
-      UnpermuteMoE.workspace_bw = []
 
-    if UnpermuteMoE.max_token_num < permuted_inputs.size(0) or UnpermuteMoE.dtype != permuted_inputs.dtype:
+    if UnpermuteMoE.dtype != permuted_inputs.dtype:
       # print("Unpermute op workspace reset!")
-      UnpermuteMoE.max_token_num = permuted_inputs.size(0)
       UnpermuteMoE.dtype = permuted_inputs.dtype
       UnpermuteMoE.workspace_fw = []
-      UnpermuteMoE.workspace_bw = []
 
     ctx.expert_for_rows = expert_for_rows
 
-    original_output, UnpermuteMoE.workspace_bw = backend.unpermute(
+    original_output = backend.unpermute(
       permuted_inputs,
-      source_row_to_dest_row,
-      UnpermuteMoE.workspace_bw,
-      UnpermuteMoE.max_token_num)
+      row_id_map)
     
     return original_output
   
@@ -200,8 +190,8 @@ class UnpermuteMoE(torch.autograd.Function):
 
     return permuted_inputs, None, None, None
 
-def permute(unpermuted_inputs, expert_for_rows, max_token_num):
+def permute(unpermuted_inputs, expert_for_rows, max_token_num=0):
   return PermuteMoE.apply(unpermuted_inputs, expert_for_rows, max_token_num)
 
-def unpermute(permuted_inputs, expert_for_rows, source_row_to_dest_row, max_token_num):
+def unpermute(permuted_inputs, expert_for_rows, source_row_to_dest_row, max_token_num=0):
   return UnpermuteMoE.apply(permuted_inputs, expert_for_rows, source_row_to_dest_row, max_token_num)
