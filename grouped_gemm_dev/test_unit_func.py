@@ -108,9 +108,12 @@ class TestMoe(unittest.TestCase):
     if PRINT:
       print("expert_for_rows: {}".format(expert_for_rows))
 
-    unpermuted_inputs = torch.empty(size=(num_rows, num_cols), dtype=dtype).cuda()
+    # unpermuted_inputs = torch.rand(size=(num_rows, num_cols), dtype=torch.float32).type(dtype).cuda()
+    # unpermuted_inputs = torch.randint(size=(num_rows, num_cols), low=0, high=400, dtype=torch.int32).type(dtype).cuda()
+    unpermuted_inputs = torch.empty(size=(num_rows, num_cols), dtype=torch.float32)
     for i in range(num_rows):
-        unpermuted_inputs[i] = i
+        unpermuted_inputs[i] = i % 300
+    unpermuted_inputs = unpermuted_inputs.type(dtype).cuda()
     if PRINT:
       print("unpermuted_inputs: {}".format(unpermuted_inputs))
 
@@ -392,6 +395,10 @@ class TestMoe(unittest.TestCase):
     dtype = torch.float16
     self.moe_permute_helper(num_rows, num_cols, num_experts, dtype, warmup_times, execution_times, atol, PRINT)
     dtype = torch.bfloat16
+    self.moe_permute_helper(num_rows, num_cols, num_experts, dtype, warmup_times, execution_times, atol, PRINT)
+    dtype = torch.float8_e5m2
+    self.moe_permute_helper(num_rows, num_cols, num_experts, dtype, warmup_times, execution_times, atol, PRINT)
+    dtype = torch.float8_e4m3fn 
     self.moe_permute_helper(num_rows, num_cols, num_experts, dtype, warmup_times, execution_times, atol, PRINT)
 
   def test_grouped_gemm(self):

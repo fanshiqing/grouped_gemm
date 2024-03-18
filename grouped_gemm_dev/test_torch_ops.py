@@ -38,9 +38,12 @@ class TestMoeOps(unittest.TestCase):
     # Prepare inputs
     _1_expert_for_rows = torch.randint(size=(num_rows,),low=0,high=num_experts, dtype=torch.int32).cuda()
     _2_expert_for_rows = torch.randint(size=(num_rows,),low=0,high=num_experts, dtype=torch.int32).cuda()
-    unpermuted_inputs = torch.empty(size=(num_rows, num_cols), dtype=dtype).cuda()
+    # unpermuted_inputs = torch.rand(size=(num_rows, num_cols), dtype=torch.float32).type(dtype).cuda()
+    # unpermuted_inputs = torch.randint(size=(num_rows, num_cols), low=0, high=400, dtype=torch.int32).type(dtype).cuda()
+    unpermuted_inputs = torch.empty(size=(num_rows, num_cols), dtype=torch.float32)
     for i in range(num_rows):
-        unpermuted_inputs[i] = i % 12345
+        unpermuted_inputs[i] = i % 300
+    unpermuted_inputs = unpermuted_inputs.type(dtype).cuda()
     unpermuted_inputs.requires_grad_(True)
     original_inputs = unpermuted_inputs.detach()
 
@@ -70,10 +73,10 @@ class TestMoeOps(unittest.TestCase):
       nvtx.range_pop()
 
       # Reset grad to avoid accumulation
-      unpermuted_inputs.grad = torch.zeros_like(unpermuted_inputs)
-      _1_permuted_inputs.grad = torch.zeros_like(_1_permuted_inputs)
-      _1_unpermute_outputs.grad = torch.zeros_like(_1_unpermute_outputs)
-      _2_permuted_inputs.grad = torch.zeros_like(_2_permuted_inputs)
+      unpermuted_inputs.grad = None
+      _1_permuted_inputs.grad = None
+      _1_unpermute_outputs.grad = None
+      _2_permuted_inputs.grad = None
 
       # Backward
       nvtx.range_push("permute & unpermute op backward")
@@ -246,6 +249,10 @@ class TestMoeOps(unittest.TestCase):
     dtype = torch.float16
     self.permute_ops_helper(num_rows, max_token_num, num_cols, num_experts, dtype, atol, execution_times, PRINT)
     dtype = torch.bfloat16
+    self.permute_ops_helper(num_rows, max_token_num, num_cols, num_experts, dtype, atol, execution_times, PRINT)
+    dtype = torch.float8_e5m2
+    self.permute_ops_helper(num_rows, max_token_num, num_cols, num_experts, dtype, atol, execution_times, PRINT)
+    dtype = torch.float8_e4m3fn
     self.permute_ops_helper(num_rows, max_token_num, num_cols, num_experts, dtype, atol, execution_times, PRINT)
 
   def test_moe_groupedgemm(self):
