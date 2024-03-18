@@ -90,6 +90,11 @@ if(${CUDA_VERSION_MAJOR} VERSION_GREATER_EQUAL "11")
   message("CUDA_VERSION ${CUDA_VERSION_MAJOR}.${CUDA_VERSION_MINOR} is greater or equal than 11.0, enable -DENABLE_BF16 flag")
 endif()
 
+if(${CUDA_VERSION} VERSION_GREATER_EQUAL "11.8")
+  add_definitions("-DENABLE_FP8")
+  message("CUDA_VERSION ${CUDA_VERSION} is greater or equal than 11.8, enable -DENABLE_FP8 flag")
+endif()
+
 option(BUILD_CUTLASS_MOE "Builds CUTLASS kernels supporting MoE GEMM" ON)
 if(BUILD_CUTLASS_MOE)
   message(STATUS "Add DBUILD_CUTLASS_MOE, requires CUTLASS. Increases compilation time")

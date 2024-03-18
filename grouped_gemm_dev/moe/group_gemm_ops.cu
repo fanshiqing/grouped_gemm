@@ -393,6 +393,7 @@ std::tuple<torch::Tensor, torch::Tensor, std::vector<Tensor>> moe_permute_op(
         break;
     }
 #endif
+#ifdef ENABLE_FP8
     case at::ScalarType::Float8_e5m2:
     {
         using dType = __nv_fp8_e5m2;
@@ -427,6 +428,7 @@ std::tuple<torch::Tensor, torch::Tensor, std::vector<Tensor>> moe_permute_op(
 
         break;
     }
+#endif
     default:
         throw std::runtime_error("Wrong activation tensor type.");
     }
@@ -515,6 +517,7 @@ torch::Tensor moe_recover_op(
         break;
     }
 #endif
+#ifdef ENABLE_FP8
     case at::ScalarType::Float8_e5m2:
     {
         using dType = __nv_fp8_e5m2;
@@ -549,6 +552,7 @@ torch::Tensor moe_recover_op(
 
         break;
     }
+#endif
     default:
         throw std::runtime_error("Wrong activation tensor type.");
     }
