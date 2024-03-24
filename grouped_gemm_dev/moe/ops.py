@@ -35,28 +35,28 @@ class PermuteMoE(torch.autograd.Function):
 
     # Device check
     if unpermuted_inputs.is_cpu:
-      raise RuntimeError("[Error] The input \"unpermuted_inputs\" of permute op is on the device: CPU!")
+      raise RuntimeError("[Error] The input `unpermuted_inputs` of permute op is on the device: CPU!")
     if expert_for_rows.is_cpu:
-      print("[Warning] The input \"expert_for_rows\" of permute op is on the device: CPU!", file=stderr)
+      print("[Warning] The input `expert_for_rows` of permute op is on the device: CPU!", file=stderr)
       expert_for_rows = expert_for_rows.cuda()
 
     # Shape check
     if unpermuted_inputs.size(0) != expert_for_rows.size(0):
-      raise RuntimeError(f"[Error] permute op input \"expert_for_rows\" shape mismatch! "
+      raise RuntimeError(f"[Error] permute op input `expert_for_rows` shape mismatch! "
                          f"Expect {unpermuted_inputs.size(0)}, but got {expert_for_rows.size(0)}.")
 
     # Data type check
     if expert_for_rows.dtype != torch.int32:
-      print(f"[Warning] The data type of the input \"expert_for_rows\" of permute op is {expert_for_rows.dtype}! "
+      print(f"[Warning] The data type of the input `expert_for_rows` of permute op is {expert_for_rows.dtype}! "
             "The recommended type is torch.int32.", file=stderr)
       expert_for_rows = expert_for_rows.to(torch.int32)
 
     # Contiguous check
     if not unpermuted_inputs.is_contiguous():
-      print("[Warning] The input \"unpermuted_inputs\" of permute op is discontiguous!", file=stderr)
+      print("[Warning] The input `unpermuted_inputs` of permute op is discontiguous!", file=stderr)
       unpermuted_inputs = unpermuted_inputs.contiguous()
     if not expert_for_rows.is_contiguous():
-      print("[Warning] The input \"expert_for_rows\" of permute op is discontiguous!", file=stderr)
+      print("[Warning] The input `expert_for_rows` of permute op is discontiguous!", file=stderr)
       expert_for_rows = expert_for_rows.contiguous()
 
     input_max_token_num = max(max_token_num, unpermuted_inputs.size(0))
@@ -117,27 +117,27 @@ class UnpermuteMoE(torch.autograd.Function):
 
     # Device check
     if permuted_inputs.is_cpu:
-      raise RuntimeError("[Error] The input \"permuted_inputs\" of unpermute op is on the device: CPU!")
+      raise RuntimeError("[Error] The input `permuted_inputs` of unpermute op is on the device: CPU!")
     if row_id_map.is_cpu:
-      print("[Warning] The input \"row_id_map\" of unpermute op is on the device: CPU!", file=stderr)
+      print("[Warning] The input `row_id_map` of unpermute op is on the device: CPU!", file=stderr)
       row_id_map = row_id_map.cuda()
 
     # Shape check
     if permuted_inputs.size(0) != row_id_map.size(0):
-      raise RuntimeError(f"[Error] unpermute op input \"row_id_map\" shape mismatch! "
+      raise RuntimeError(f"[Error] unpermute op input `row_id_map` shape mismatch! "
                          f"Expect {permuted_inputs.size(0)}, but got {row_id_map.size(0)}.")
     # Data type check
     if row_id_map.dtype != torch.int32:
-      print(f"[Warning] The data type of the input \"row_id_map\" of unpermute op is {row_id_map.dtype}! "
+      print(f"[Warning] The data type of the input `row_id_map` of unpermute op is {row_id_map.dtype}! "
             "The recommended type is torch.int32.", file=stderr)
       row_id_map = row_id_map.to(torch.int32)
 
     # Contiguous check
     if not permuted_inputs.is_contiguous():
-      print("[Warning] The input \"permuted_inputs\" of unpermute op is discontiguous!", file=stderr)
+      print("[Warning] The input `permuted_inputs` of unpermute op is discontiguous!", file=stderr)
       permuted_inputs = permuted_inputs.contiguous()
     if not row_id_map.is_contiguous():
-      print("[Warning] The input \"row_id_map\" of unpermute op is discontiguous!", file=stderr)
+      print("[Warning] The input `row_id_map` of unpermute op is discontiguous!", file=stderr)
       row_id_map = row_id_map.contiguous()
 
     ctx.row_id_map = row_id_map
@@ -193,28 +193,28 @@ class PermuteMoE_topK(torch.autograd.Function):
 
     # Device check
     if input_act.is_cpu:
-      raise RuntimeError("[Error] The input \"input_act\" of permute_topK op is on the device: CPU!")
+      raise RuntimeError("[Error] The input `input_act` of permute_topK op is on the device: CPU!")
     if indices.is_cpu:
-      print("[Warning] The input \"indices\" of permute_topK op is on the device: CPU!", file=stderr)
+      print("[Warning] The input `indices` of permute_topK op is on the device: CPU!", file=stderr)
       expert_for_rows = expert_for_rows.cuda()
 
     # Shape check
     if input_act.size(0) != indices.size(0):
-      raise RuntimeError(f"[Error] permute_topK op input \"indices\" shape mismatch! "
+      raise RuntimeError(f"[Error] permute_topK op input `indices` shape mismatch! "
                          f"Expect {input_act.size(0)}, but got {indices.size(0)}.")
 
     # Data type check
     if indices.dtype != torch.int32:
-      print(f"[Warning] The data type of the input \"indices\" of permute_topK op is {indices.dtype}! "
+      print(f"[Warning] The data type of the input `indices` of permute_topK op is {indices.dtype}! "
             "The recommended type is torch.int32.", file=stderr)
       indices = indices.to(torch.int32)
 
     # Contiguous check
     if not input_act.is_contiguous():
-      print("[Warning] The input \"input_act\" of permute_topK op is discontiguous!", file=stderr)
+      print("[Warning] The input `input_act` of permute_topK op is discontiguous!", file=stderr)
       input_act = input_act.contiguous()
     if not indices.is_contiguous():
-      print("[Warning] The input \"indices\" of permute_topK op is discontiguous!", file=stderr)
+      print("[Warning] The input `indices` of permute_topK op is discontiguous!", file=stderr)
       indices = indices.contiguous()
 
     num_topK = indices.size(1)
@@ -285,41 +285,41 @@ class UnpermuteMoE_topK(torch.autograd.Function):
 
     # Device check
     if input_act.is_cpu:
-      raise RuntimeError("[Error] The input \"input_act\" of unpermute_topK op is on the device: CPU!")
+      raise RuntimeError("[Error] The input `input_act` of unpermute_topK op is on the device: CPU!")
     if row_id_map.is_cpu:
-      print("[Warning] The input \"row_id_map\" of unpermute_topK op is on the device: CPU!", file=stderr)
+      print("[Warning] The input `row_id_map` of unpermute_topK op is on the device: CPU!", file=stderr)
       row_id_map = row_id_map.cuda()
     if probs.is_cpu:
-      print("[Warning] The input \"probs\" of unpermute_topK op is on the device: CPU!", file=stderr)
+      print("[Warning] The input `probs` of unpermute_topK op is on the device: CPU!", file=stderr)
       probs = probs.cuda()
 
     # Shape check
     if row_id_map.size(0) != input_act.size(0):
-      raise RuntimeError(f"[Error] unpermute_topK op input \"row_id_map\" shape mismatch! "
+      raise RuntimeError(f"[Error] unpermute_topK op input `row_id_map` shape mismatch! "
                          f"Expect {input_act.size(0)}, but got {row_id_map.size(0)}.")
     if input_act.size(0) != probs.size(0) * probs.size(1):
-      raise RuntimeError(f"[Error] unpermute_topK op input \"probs\" shape mismatch! "
+      raise RuntimeError(f"[Error] unpermute_topK op input `probs` shape mismatch! "
                          f"Expect {input_act.size(0)}, but got {probs.size(0) * probs.size(1)}.")
 
     # Data type check
     if row_id_map.dtype != torch.int32:
-      print(f"[Warning] The data type of the input \"row_id_map\" of unpermute_topK op is {row_id_map.dtype}! "
+      print(f"[Warning] The data type of the input `row_id_map` of unpermute_topK op is {row_id_map.dtype}! "
             "The recommended type is torch.int32.", file=stderr)
       row_id_map = row_id_map.to(torch.int32)
     if probs.dtype != torch.float32:
-      print(f"[Warning] The data type of the input \"probs\" of unpermute_topK op is {probs.dtype}! "
+      print(f"[Warning] The data type of the input `probs` of unpermute_topK op is {probs.dtype}! "
             "The recommended type is torch.float32.", file=stderr)
       probs = probs.to(torch.float32)
 
     # Contiguous check
     if not input_act.is_contiguous():
-      print("[Warning] The input \"input_act\" of unpermute_topK op is discontiguous!", file=stderr)
+      print("[Warning] The input `input_act` of unpermute_topK op is discontiguous!", file=stderr)
       input_act = input_act.contiguous()
     if not row_id_map.is_contiguous():
-      print("[Warning] The input \"row_id_map\" of unpermute_topK op is discontiguous!", file=stderr)
+      print("[Warning] The input `row_id_map` of unpermute_topK op is discontiguous!", file=stderr)
       row_id_map = row_id_map.contiguous()
     if not probs.is_contiguous():
-      print("[Warning] The input \"probs\" of unpermute_topK op is discontiguous!", file=stderr)
+      print("[Warning] The input `probs` of unpermute_topK op is discontiguous!", file=stderr)
       probs = probs.contiguous()
 
     num_tokens = probs.size(0)
@@ -390,43 +390,43 @@ class GroupedGemmMoE(torch.autograd.Function):
 
     # Weight matrices num check
     if len(weights_list) != tokens_per_expert.size(0):
-      raise RuntimeError(f"[Error] groupedgemm op input \"weights_list\" matrices num mismatch! "
+      raise RuntimeError(f"[Error] groupedgemm op input `weights_list` matrices num mismatch! "
                          f"Expect ({tokens_per_expert.size(0)}), but got ({len(weights_list)}).")
 
     # Device check
     if permuted_inputs.is_cpu:
-      raise RuntimeError("[Error] The input \"permuted_inputs\" of groupedgemm op is on the device: CPU!")
+      raise RuntimeError("[Error] The input `permuted_inputs` of groupedgemm op is on the device: CPU!")
     if weights_list[0].is_cpu:
-      raise RuntimeError("[Error] The input \"weights_list\" of groupedgemm op is on the device: CPU!")
+      raise RuntimeError("[Error] The input `weights_list` of groupedgemm op is on the device: CPU!")
     if tokens_per_expert.is_cpu:
-      print("[Warning] The input \"tokens_per_expert\" of groupedgemm op is on the device: CPU!", file=stderr)
+      print("[Warning] The input `tokens_per_expert` of groupedgemm op is on the device: CPU!", file=stderr)
       tokens_per_expert = tokens_per_expert.cuda()
 
     # Shape check
     if not transB:
       if permuted_inputs.size(1) != weights_list[0].size(0):
-        raise RuntimeError(f"[Error] groupedgemm op input \"weights_list\" shape mismatch! "
+        raise RuntimeError(f"[Error] groupedgemm op input `weights_list` shape mismatch! "
                            f"Expect ({permuted_inputs.size(1)}), but got ({weights_list[0].size(0)}).")
     else:
       if permuted_inputs.size(1) != weights_list[0].size(1):
-        raise RuntimeError(f"[Error] groupedgemm op input \"weights_list\" shape mismatch! "
+        raise RuntimeError(f"[Error] groupedgemm op input `weights_list` shape mismatch! "
                            f"Expect ({permuted_inputs.size(1)}), but got ({weights_list[0].size(1)}).")
 
     # Data type check
     if permuted_inputs.dtype != weights_list[0].dtype:
       raise RuntimeError(f"[Error] groupedgemm op input data type mismatch! "
-                         f"\"permuted_inputs\": {permuted_inputs.dtype}, \"weights_list\": {weights_list[0].dtype}.")
+                         f"`permuted_inputs`: {permuted_inputs.dtype}, `weights_list`: {weights_list[0].dtype}.")
     if tokens_per_expert.dtype != torch.int32:
-      print(f"[Warning] The data type of the input \"tokens_per_expert\" of groupedgemm op is {tokens_per_expert.dtype}! "
+      print(f"[Warning] The data type of the input `tokens_per_expert` of groupedgemm op is {tokens_per_expert.dtype}! "
             "The recommended type is torch.int32.", file=stderr)
       tokens_per_expert = tokens_per_expert.to(torch.int32)
 
     # Contiguous check
     if not permuted_inputs.is_contiguous():
-      print("[Warning] The input \"permuted_inputs\" of groupedgemm op is discontiguous!", file=stderr)
+      print("[Warning] The input `permuted_inputs` of groupedgemm op is discontiguous!", file=stderr)
       permuted_inputs = permuted_inputs.contiguous()
     if not weights_list[0].is_contiguous():
-      print("[Warning] The input \"weights_list\" of groupedgemm op is discontiguous!", file=stderr)
+      print("[Warning] The input `weights_list` of groupedgemm op is discontiguous!", file=stderr)
       for w in weights_list:
         w = w.contiguous()
 
@@ -440,7 +440,7 @@ class GroupedGemmMoE(torch.autograd.Function):
       try:
         weights_list[0].main_grad
       except AttributeError:
-        raise AttributeError("[Error] groupedgemm op input \"weights_list\" needs a `main_grad` field for each weight inside if `gradient_accumulation_fusion` is set!")
+        raise AttributeError("[Error] groupedgemm op input `weights_list` needs a `main_grad` field for each weight inside if `gradient_accumulation_fusion` is set!")
 
     ctx.save_for_backward(permuted_inputs, tokens_per_expert)
     ctx.transB = transB
