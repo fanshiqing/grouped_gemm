@@ -77,7 +77,8 @@ __global__ void setGroupedGemmProblemDesc(
     int *gemm_k_per_expert,
     ElementA *ptr_A,
     ElementB *ptr_B,
-    ElementC *ptr_C)
+    ElementC *ptr_C,
+    bool set_C)
 {
     // Specialize BlockScan for a 1D block of 128 threads of type int
     typedef cub::BlockScan<int64_t, NUM_EXPERTS> BlockScan;
@@ -94,16 +95,18 @@ __global__ void setGroupedGemmProblemDesc(
 
     int64_t stride_A = gemm_m * gemm_k;
     int64_t stride_B = gemm_k * gemm_n;
-    int64_t stride_C = gemm_m * gemm_n;
-
     // Collectively compute the block-wide exclusive prefix sum
     BlockScan(temp_storage).ExclusiveSum(stride_A, stride_A);
     BlockScan(temp_storage).ExclusiveSum(stride_B, stride_B);
-    BlockScan(temp_storage).ExclusiveSum(stride_C, stride_C);
-
     problem_desc.device_ptr_A[expert_id] = ptr_A + stride_A;
     problem_desc.device_ptr_B[expert_id] = ptr_B + stride_B;
-    problem_desc.device_ptr_C[expert_id] = ptr_C + stride_C;
+
+    if (set_C)
+    {
+        int64_t stride_C = gemm_m * gemm_n;
+        BlockScan(temp_storage).ExclusiveSum(stride_C, stride_C);
+        problem_desc.device_ptr_C[expert_id] = ptr_C + stride_C;
+    }
 }
 
 // For Variable M
@@ -161,6 +164,7 @@ void setGroupedGemmProblemDescFromDevice(
     ElementA *ptr_A,
     ElementB *ptr_B,
     ElementC *ptr_C,
+    bool set_C,
     cudaStream_t stream)
 {
     if (num_experts > NUM_EXPERTS)
@@ -168,15 +172,11 @@ void setGroupedGemmProblemDescFromDevice(
         throw std::runtime_error(
             "[Grouped GEMM Runner] The number of experts cannot exceed NUM_EXPERTS!");
     }
-    setGroupedGemmProblemDesc<ElementA,
-                              ElementB,
-                              ElementC,
-                              LayoutA,
-                              LayoutB,
-                              LayoutC><<<1, num_experts, 0, stream>>>(
-                                    problem_desc,
-                                    gemm_m, gemm_n, gemm_k_per_expert,
-                                    ptr_A, ptr_B, ptr_C);
+    setGroupedGemmProblemDesc<ElementA, ElementB, ElementC,
+                              LayoutA, LayoutB, LayoutC><<<1, num_experts, 0, stream>>>(
+        problem_desc,
+        gemm_m, gemm_n, gemm_k_per_expert,
+        ptr_A, ptr_B, ptr_C, set_C);
 }
 
 // For Variable M

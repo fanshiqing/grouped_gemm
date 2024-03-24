@@ -18,6 +18,7 @@
 #include "sinkhorn.h"
 #include "cutlass_kernels/th_utils.h"
 #include "cutlass_kernels/moe_gemm/moe_gemm_kernels.h"
+#include "cutlass_kernels/moe_gemm/moe_gemm_backward_template.h"
 #include "cutlass_kernels/moe_gemm/moe_permute_kernels.h"
 #include "cutlass_kernels/moe_gemm/moe_gemm_utils.h"
 
@@ -105,12 +106,65 @@ Tensor run_group_gemm_helper(Tensor              input_activations,
     return fc1_output;
 }
 
+template <typename T,
+          typename WeightType,
+          typename AccumGradType>
+void group_gemm_varK_algo_dispatcher(T*              A,
+                                     WeightType*     B,
+                                     T*              C,
+                                     AccumGradType** weight_grad_list,
+                                     int64_t         gemm_m,
+                                     int64_t         gemm_n,
+                                     int*            gemm_k_per_expert,
+                                     int             num_tokens,
+                                     int             num_experts,
+                                     bool            transC,
+                                     cudaStream_t    stream)
+{
+    int sm_ = getSMVersion();
+
+    if (sm_ != 90)
+    {
+        groupedgemmformoe::MoeGemmRunner<T, WeightType> moe_gemm_runner_;
+
+        moe_gemm_runner_.template moe_gemm_backward<AccumGradType>(
+            A,
+            B,
+            C,
+            weight_grad_list,
+            gemm_m,
+            gemm_n,
+            gemm_k_per_expert,
+            num_tokens,
+            num_experts,
+            transC,
+            stream);
+    }
+    else
+    {
+        if (!cublas_init)
+            cublas_handle_init();
+
+        cublas_group_gemm_helper<T>(
+            A,
+            B,
+            C,
+            gemm_m,
+            gemm_n,
+            gemm_k_per_expert,
+            num_experts,
+            transC,
+            stream);
+    }
+}
+
 // act type, weight type
 template <typename T, typename WeightType>
 Tensor run_group_gemm_backward_helper(Tensor input_activations,
                                       Tensor fc1_expert_weights,
                                       Tensor tokens_per_expert,
-                                      bool   transC)
+                                      bool   transC,
+                                      std::vector<Tensor> weight_grad_list)
 {
     // Matrix A: X      shape(m, k)
     // Matrix B: dL/dY  shape(m, n)
@@ -135,48 +189,113 @@ Tensor run_group_gemm_backward_helper(Tensor input_activations,
 
     const at::ScalarType _st = input_activations.scalar_type();
     Tensor fc1_output;
-    if (transC)
-    {
-        fc1_output = torch::empty({num_experts, gemm_n, gemm_m}, torch::dtype(_st).device(torch::kCUDA).requires_grad(false));
-    }
-    else
-    {
-        fc1_output = torch::empty({num_experts, gemm_m, gemm_n}, torch::dtype(_st).device(torch::kCUDA).requires_grad(false));
-    }
-    T *fc1_output_ptr = get_ptr<T>(fc1_output);
 
-    int sm_ = getSMVersion();
-
-    if (sm_ != 90)
+    if (weight_grad_list.empty())
     {
-        groupedgemmformoe::MoeGemmRunner<T, WeightType> moe_gemm_runner_;
+        if (transC)
+        {
+            fc1_output = torch::empty({num_experts, gemm_n, gemm_m}, torch::dtype(_st).device(torch::kCUDA).requires_grad(false));
+        }
+        else
+        {
+            fc1_output = torch::empty({num_experts, gemm_m, gemm_n}, torch::dtype(_st).device(torch::kCUDA).requires_grad(false));
+        }
 
-        moe_gemm_runner_.moe_gemm_backward(input_act_ptr,
-                                           fc1_expert_weights_ptr,
-                                           fc1_output_ptr,
-                                           gemm_m,                // gemm_m
-                                           gemm_n,                // gemm_n
-                                           tokens_per_expert_ptr, // gemm_k
-                                           gemm_k,                // num_tokens
-                                           num_experts,
-                                           transC,
-                                           stream);
-    }
-    else
-    {
-        if (!cublas_init)
-            cublas_handle_init();
-
-        cublas_group_gemm_helper<T>(
+        T *fc1_output_ptr = get_ptr<T>(fc1_output);
+        group_gemm_varK_algo_dispatcher<T, WeightType, T>(
             input_act_ptr,
             fc1_expert_weights_ptr,
             fc1_output_ptr,
+            nullptr,
             gemm_m,                // gemm_m
             gemm_n,                // gemm_n
             tokens_per_expert_ptr, // gemm_k
+            gemm_k,                // num_tokens
             num_experts,
             transC,
             stream);
+    }
+    else
+    {
+        const at::ScalarType _st = weight_grad_list[0].scalar_type();
+        switch (_st) {
+            case at::ScalarType::Float: {
+                using dType = float;
+
+                dType *weight_grad_ptr_list[num_experts];
+                for (size_t i = 0; i < num_experts; i++)
+                {
+                    weight_grad_ptr_list[i] = get_ptr<dType>(weight_grad_list[i]);
+                }
+
+                group_gemm_varK_algo_dispatcher<T, WeightType, dType>(
+                    input_act_ptr,
+                    fc1_expert_weights_ptr,
+                    nullptr,
+                    weight_grad_ptr_list,
+                    gemm_m,                // gemm_m
+                    gemm_n,                // gemm_n
+                    tokens_per_expert_ptr, // gemm_k
+                    gemm_k,                // num_tokens
+                    num_experts,
+                    transC,
+                    stream);
+
+                break;
+            }
+            case at::ScalarType::Half: {
+                using dType = half;
+
+                dType *weight_grad_ptr_list[num_experts];
+                for (size_t i = 0; i < num_experts; i++)
+                {
+                    weight_grad_ptr_list[i] = get_ptr<dType>(weight_grad_list[i]);
+                }
+
+                group_gemm_varK_algo_dispatcher<T, WeightType, dType>(
+                    input_act_ptr,
+                    fc1_expert_weights_ptr,
+                    nullptr,
+                    weight_grad_ptr_list,
+                    gemm_m,                // gemm_m
+                    gemm_n,                // gemm_n
+                    tokens_per_expert_ptr, // gemm_k
+                    gemm_k,                // num_tokens
+                    num_experts,
+                    transC,
+                    stream);
+
+                break;
+            }
+#ifdef ENABLE_BF16
+            case at::ScalarType::BFloat16: {
+                using dType = __nv_bfloat16;
+
+                dType *weight_grad_ptr_list[num_experts];
+                for (size_t i = 0; i < num_experts; i++)
+                {
+                    weight_grad_ptr_list[i] = get_ptr<dType>(weight_grad_list[i]);
+                }
+
+                group_gemm_varK_algo_dispatcher<T, WeightType, dType>(
+                    input_act_ptr,
+                    fc1_expert_weights_ptr,
+                    nullptr,
+                    weight_grad_ptr_list,
+                    gemm_m,                // gemm_m
+                    gemm_n,                // gemm_n
+                    tokens_per_expert_ptr, // gemm_k
+                    gemm_k,                // num_tokens
+                    num_experts,
+                    transC,
+                    stream);
+
+                break;
+            }
+#endif
+            default:
+                throw std::runtime_error("Wrong main_grad tensor data type.");
+        }
     }
 
     return fc1_output;
@@ -233,7 +352,8 @@ Tensor moe_group_gemm_op(Tensor              input_activations,
 Tensor moe_group_gemm_backward_op(Tensor input_activations,
                                   Tensor fc1_expert_weights,
                                   Tensor tokens_per_expert,
-                                  bool   transC)
+                                  bool   transC,
+                                  std::vector<Tensor> weight_grad_list)
 {
     Tensor output_tensor;
 
@@ -245,7 +365,8 @@ Tensor moe_group_gemm_backward_op(Tensor input_activations,
                 input_activations,
                 fc1_expert_weights,
                 tokens_per_expert,
-                transC);
+                transC,
+                weight_grad_list);
 
             break;
         }
@@ -254,7 +375,8 @@ Tensor moe_group_gemm_backward_op(Tensor input_activations,
                 input_activations,
                 fc1_expert_weights,
                 tokens_per_expert,
-                transC);
+                transC,
+                weight_grad_list);
 
             break;
         }
@@ -264,7 +386,8 @@ Tensor moe_group_gemm_backward_op(Tensor input_activations,
                 input_activations,
                 fc1_expert_weights,
                 tokens_per_expert,
-                transC);
+                transC,
+                weight_grad_list);
 
             break;
         }

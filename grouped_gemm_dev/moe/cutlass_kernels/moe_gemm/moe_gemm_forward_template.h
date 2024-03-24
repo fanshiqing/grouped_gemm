@@ -67,7 +67,7 @@ void generic_moe_gemm_kernelLauncher(T*             A,
 
     // We need separate config for each architecture since we will target different tensorcore instructions. For float,
     // we do not target TCs.
-    using MixedGemmArchTraits = cutlass::gemm::kernel::MixedGemmArchTraits<ElementType, CutlassWeightType, arch>;
+    using MixedGemmArchTraits = cutlass::gemm::kernel::MixedGemmArchTraits<ElementType, CutlassWeightType, ElementType, arch>;
     using ElementAccumulator  = float;
     using EpilogueOp = cutlass::epilogue::thread::LinearCombination<ElementType,
                                                                     MixedGemmArchTraits::ElementsPerAccessC,

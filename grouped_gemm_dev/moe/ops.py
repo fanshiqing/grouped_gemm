@@ -375,6 +375,7 @@ class GroupedGemmMoE(torch.autograd.Function):
               permuted_inputs: torch.Tensor,
               tokens_per_expert: torch.Tensor,
               transB: bool,
+              gradient_accumulation_fusion: bool,
               *weights_list):
 
     # Empty input check
@@ -434,9 +435,16 @@ class GroupedGemmMoE(torch.autograd.Function):
       weights_list,
       tokens_per_expert,
       transB)
-    
+
+    if gradient_accumulation_fusion:
+      try:
+        weights_list[0].main_grad
+      except AttributeError:
+        raise AttributeError("[Error] groupedgemm op input \"weights_list\" needs a `main_grad` field for each weight inside if `gradient_accumulation_fusion` is set!")
+
     ctx.save_for_backward(permuted_inputs, tokens_per_expert)
     ctx.transB = transB
+    ctx.gradient_accumulation_fusion = gradient_accumulation_fusion
     ctx.weights_list = weights_list
 
     return output
@@ -454,7 +462,8 @@ class GroupedGemmMoE(torch.autograd.Function):
       for weight in weights_list:
         weight_grad_list.append(torch.zeros_like(weight))
       num_cols = ctx.size[1] if transB else ctx.size[0]
-      return torch.empty(size=(0, num_cols), dtype=ctx.dtype, device=ctx.device), None, None, *weight_grad_list
+      return torch.empty(size=(0, num_cols), dtype=ctx.dtype, device=ctx.device), \
+        None, None, None, *weight_grad_list
 
     permuted_inputs, tokens_per_expert = ctx.saved_tensors
 
@@ -469,19 +478,28 @@ class GroupedGemmMoE(torch.autograd.Function):
         tokens_per_expert,
         not transB)
       
-    weight_grad = None
-    if ctx.needs_input_grad[3]:
-      weight_grad = torch.ops.moe_unit_ops.moe_group_gemm_backward_op(
-        permuted_inputs,
-        permuted_inputs_grad,
-        tokens_per_expert,
-        transB)
-
     weight_grad_list = []
-    for i in range(weight_grad.shape[0]):
-      weight_grad_list.append(weight_grad[i])
+    if ctx.needs_input_grad[4]:
+      if not ctx.gradient_accumulation_fusion:
+        weight_grad = torch.ops.moe_unit_ops.moe_group_gemm_backward_op(
+          permuted_inputs,
+          permuted_inputs_grad,
+          tokens_per_expert,
+          transB,
+          weight_grad_list)
+        for i in range(weight_grad.shape[0]):
+          weight_grad_list.append(weight_grad[i])
+      else:
+        for weight in weights_list:
+          weight_grad_list.append(weight.main_grad)
+        weight_grad = torch.ops.moe_unit_ops.moe_group_gemm_backward_op(
+          permuted_inputs,
+          permuted_inputs_grad,
+          tokens_per_expert,
+          transB,
+          weight_grad_list)
 
-    return activation_grad, None, None, *weight_grad_list
+    return activation_grad, None, None, None, *weight_grad_list
 
 ################################################################################################
 ##
@@ -501,8 +519,19 @@ def unpermute(permuted_inputs, row_id_map):
 def unpermute_topK(input_act, row_id_map, probs):
   return UnpermuteMoE_topK.apply(input_act, row_id_map, probs)
 
-def groupedgemm(permuted_inputs, tokens_per_expert, transB=False, *weights_list):
-  return GroupedGemmMoE.apply(permuted_inputs, tokens_per_expert, transB, *weights_list)
+def groupedgemm(permuted_inputs, tokens_per_expert, *weights_list,
+                transB=False, gradient_accumulation_fusion=False):
+  """Grouped gemm pytorch wrapper
+
+  Arguments:
+      gradient_accumulation_fusion: Whether to do gradient accumulation.
+          If this is set, we are assuming that each input weight has a 
+          `main_grad` field.
+  """
+  
+  return GroupedGemmMoE.apply(permuted_inputs, tokens_per_expert,
+                              transB, gradient_accumulation_fusion,
+                              *weights_list)
 
 def sinkhorn_kernel(cost, tol=0.0001):
     return torch.ops.moe_unit_ops.sinkhorn(cost, tol)

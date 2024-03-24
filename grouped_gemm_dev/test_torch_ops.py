@@ -120,8 +120,9 @@ class TestMoeOps(unittest.TestCase):
                              transB,
                              dtype,
                              atol,
-                             execution_times,
-                             PRINT):
+                             gradient_accumulation_fusion=False,
+                             execution_times=1,
+                             PRINT=False):
     # Prepare inputs
     rand_mean = 0
     rand_std = 0.02
@@ -140,10 +141,12 @@ class TestMoeOps(unittest.TestCase):
         weights = torch.empty([inter_size, hidden_size], dtype=dtype, device="cuda").normal_(rand_mean, rand_std)    
       weights_list.append(weights.detach())
       weights_list[i].requires_grad_(True)
+      weights_list[i].main_grad = torch.zeros_like(weights_list[i], dtype=torch.float32)
 
     permuted_inputs.requires_grad_(True)
 
     # Build network
+    execution_times = 1 if gradient_accumulation_fusion else execution_times
     for _ in range(execution_times):
       # Forward
       nvtx.range_push("grouped gemm op forward")
@@ -151,7 +154,11 @@ class TestMoeOps(unittest.TestCase):
       # shape mismatch test
       # weights = torch.nn.functional.pad(weights, [0, 0, 0, 1])
 
-      gemm_output = groupedgemm(permuted_inputs, tokens_per_expert, transB, *weights_list)
+      gemm_output = groupedgemm(permuted_inputs,
+                                tokens_per_expert,
+                                *weights_list,
+                                transB=transB,
+                                gradient_accumulation_fusion=gradient_accumulation_fusion)
       nvtx.range_pop()
 
       # Reset grad to avoid accumulation
@@ -270,28 +277,36 @@ class TestMoeOps(unittest.TestCase):
     # so the max error of the backward result is the accumulation of errors from both the forward 
     # and backward processes.
 
-    num_rows =        4096 * 2
-    hidden_size =     2048
-    inter_size =      hidden_size * 4
-    num_experts =     8
-    atol =            1e-2
-    execution_times = 10
-    PRINT =           False
+    num_rows =                     4096 * 2
+    hidden_size =                  2048
+    inter_size =                   hidden_size * 4
+    num_experts =                  8
+    atol =                         1e-2
+    gradient_accumulation_fusion = True
+    execution_times =              1
+    PRINT =                        False
 
     print()
     transB = False
     dtype = torch.float32
-    self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol, execution_times, PRINT)
+    self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol,
+                                gradient_accumulation_fusion, execution_times, PRINT)
     dtype = torch.float16
-    self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol, execution_times, PRINT)
+    self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol,
+                                gradient_accumulation_fusion, execution_times, PRINT)
     dtype = torch.bfloat16
-    self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol, execution_times, PRINT)
     transB = True
-    self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol, execution_times, PRINT)
+    self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol,
+                                gradient_accumulation_fusion, execution_times, PRINT)
+    gradient_accumulation_fusion = False
+    self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol,
+                                gradient_accumulation_fusion, execution_times, PRINT)
     num_rows = 0
-    self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol, execution_times, PRINT)
+    self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol,
+                                gradient_accumulation_fusion, execution_times, PRINT)
     transB = False
-    self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol, execution_times, PRINT)
+    self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol,
+                                gradient_accumulation_fusion, execution_times, PRINT)
 
 def test_ops():
   loader = unittest.TestLoader()
