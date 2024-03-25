@@ -5,6 +5,7 @@
 import torch
 import unittest
 import torch.cuda.nvtx as nvtx
+import triton
 
 try:
   from grouped_gemm import permute, unpermute, groupedgemm
@@ -122,7 +123,8 @@ class TestMoeOps(unittest.TestCase):
                              atol,
                              gradient_accumulation_fusion=False,
                              execution_times=1,
-                             PRINT=False):
+                             PRINT=False,
+                             BENCHMARK=False):
     # Prepare inputs
     rand_mean = 0
     rand_std = 0.02
@@ -132,6 +134,7 @@ class TestMoeOps(unittest.TestCase):
     tokens_per_expert = tokens_per_expert.to(torch.int32)
 
     permuted_inputs = torch.empty([num_rows, hidden_size], dtype=dtype, device="cuda").normal_(rand_mean, rand_std)
+    permuted_inputs.requires_grad_(True)
 
     weights_list = []
     for i in range(num_experts):
@@ -143,17 +146,10 @@ class TestMoeOps(unittest.TestCase):
       weights_list[i].requires_grad_(True)
       weights_list[i].main_grad = torch.zeros_like(weights_list[i], dtype=torch.float32)
 
-    permuted_inputs.requires_grad_(True)
-
     # Build network
-    execution_times = 1 if gradient_accumulation_fusion else execution_times
     for _ in range(execution_times):
       # Forward
       nvtx.range_push("grouped gemm op forward")
-      
-      # shape mismatch test
-      # weights = torch.nn.functional.pad(weights, [0, 0, 0, 1])
-
       gemm_output = groupedgemm(permuted_inputs,
                                 tokens_per_expert,
                                 *weights_list,
@@ -168,7 +164,7 @@ class TestMoeOps(unittest.TestCase):
 
       # Backward
       nvtx.range_push("grouped gemm op backward")
-      gemm_output.backward(gemm_output.detach())
+      gemm_output.backward(gemm_output.detach(), retain_graph=True)
       nvtx.range_pop()
 
     weights_grad = []
@@ -200,6 +196,9 @@ class TestMoeOps(unittest.TestCase):
 
       gemm_output_ref_list.append(gemm_output_ref)
       weights_expert_grad = weights_expert.grad
+      if gradient_accumulation_fusion:
+        weights_expert_grad = weights_expert_grad * execution_times
+
       if transB:
         weights_expert_grad = weights_expert_grad.T
       weight_grad_ref_list.append(weights_expert_grad.unsqueeze(0))
@@ -225,23 +224,37 @@ class TestMoeOps(unittest.TestCase):
       print("grouped gemm empty input activation test passed.")
       return
 
-    gemm_output = gemm_output.float().cpu().detach().numpy().flatten()
-    gemm_output_ref = gemm_output_ref.float().cpu().detach().numpy().flatten()
-    max_abs_error = abs(gemm_output - gemm_output_ref).max()
+    result = gemm_output.float().cpu().detach().numpy().flatten()
+    result_ref = gemm_output_ref.float().cpu().detach().numpy().flatten()
+    max_abs_error = abs(result - result_ref).max()
     print(f"grouped gemm forward max error: \t\t\t{max_abs_error:.3e} ({dtype})")
     assert (max_abs_error < atol), "test_moe_groupedgemm failed!"
 
-    gemm_output = permuted_inputs.grad.float().cpu().detach().numpy()
-    gemm_output_ref = activation_grad_ref.float().cpu().detach().numpy()
-    max_abs_error = abs(gemm_output - gemm_output_ref).max()
+    result = permuted_inputs.grad.float().cpu().detach().numpy()
+    result_ref = activation_grad_ref.float().cpu().detach().numpy()
+    max_abs_error = abs(result - result_ref).max()
     print(f"grouped gemm backward activation.grad max error: \t{max_abs_error:.3e} ({dtype})")
     assert (max_abs_error < atol), "test_moe_groupedgemm failed!"
 
-    gemm_output = weights_grad.float().cpu().detach().numpy().flatten()
-    gemm_output_ref = weight_grad_ref.float().cpu().detach().numpy().flatten()
-    max_abs_error = abs(gemm_output - gemm_output_ref).max()
+    result = weights_grad.float().cpu().detach().numpy().flatten()
+    result_ref = weight_grad_ref.float().cpu().detach().numpy().flatten()
+    max_abs_error = abs(result - result_ref).max()
     print(f"grouped gemm backward weight.grad max error: \t\t{max_abs_error:.3e} ({dtype})")
     assert (max_abs_error < atol), "test_moe_groupedgemm failed!"
+
+    # Benchmark
+    if BENCHMARK:
+      print(f"-------- Benchmark --------")
+      t = triton.testing.do_bench(lambda: groupedgemm(permuted_inputs,   \
+                                                      tokens_per_expert, \
+                                                      *weights_list,     \
+                                                      transB=transB,     \
+                                                      gradient_accumulation_fusion=gradient_accumulation_fusion))
+      print(f"grouped gemm fwd: {t:.3f} ms")
+
+      bwd_input = torch.rand_like(gemm_output)
+      t = triton.testing.do_bench(lambda: gemm_output.backward(bwd_input, retain_graph=True))
+      print(f"grouped gemm bwd: {t:.3f} ms")
 
 ################################################################################################
 ##
@@ -283,30 +296,31 @@ class TestMoeOps(unittest.TestCase):
     num_experts =                  8
     atol =                         1e-2
     gradient_accumulation_fusion = True
-    execution_times =              1
+    execution_times =              5
     PRINT =                        False
+    BENCHMARK =                    False
 
     print()
     transB = False
     dtype = torch.float32
     self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol,
-                                gradient_accumulation_fusion, execution_times, PRINT)
+                                gradient_accumulation_fusion, execution_times, PRINT, BENCHMARK)
     dtype = torch.float16
     self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol,
-                                gradient_accumulation_fusion, execution_times, PRINT)
+                                gradient_accumulation_fusion, execution_times, PRINT, BENCHMARK)
     dtype = torch.bfloat16
     transB = True
     self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol,
-                                gradient_accumulation_fusion, execution_times, PRINT)
+                                gradient_accumulation_fusion, execution_times, PRINT, BENCHMARK)
     gradient_accumulation_fusion = False
     self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol,
-                                gradient_accumulation_fusion, execution_times, PRINT)
+                                gradient_accumulation_fusion, execution_times, PRINT, BENCHMARK)
     num_rows = 0
     self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol,
-                                gradient_accumulation_fusion, execution_times, PRINT)
+                                gradient_accumulation_fusion, execution_times, PRINT, BENCHMARK)
     transB = False
     self.groupedgemm_ops_helper(num_rows, hidden_size, inter_size, num_experts, transB, dtype, atol,
-                                gradient_accumulation_fusion, execution_times, PRINT)
+                                gradient_accumulation_fusion, execution_times, PRINT, BENCHMARK)
 
 def test_ops():
   loader = unittest.TestLoader()

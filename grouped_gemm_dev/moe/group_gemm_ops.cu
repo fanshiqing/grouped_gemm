@@ -145,10 +145,11 @@ void group_gemm_varK_algo_dispatcher(T*              A,
         if (!cublas_init)
             cublas_handle_init();
 
-        cublas_group_gemm_helper<T>(
+        cublas_group_gemm_helper<T, AccumGradType>(
             A,
             B,
             C,
+            weight_grad_list,
             gemm_m,
             gemm_n,
             gemm_k_per_expert,

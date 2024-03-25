@@ -55,12 +55,14 @@ void cublas_group_gemm_helper(
         Btype = CUDA_R_16F;
         Ctype = CUDA_R_16F;
     }
+#ifdef ENABLE_BF16
     else if (std::is_same<T, __nv_bfloat16>::value)
     {
         Atype = CUDA_R_16BF;
         Btype = CUDA_R_16BF;
         Ctype = CUDA_R_16BF;
     }
+#endif
 
     cublasOperation_t trans_A = CUBLAS_OP_N;
     cublasOperation_t trans_B = transB ? CUBLAS_OP_T : CUBLAS_OP_N;
@@ -107,11 +109,13 @@ void cublas_group_gemm_helper(
     }
 }
 
-template <typename T>
+template <typename T,
+          typename AccumGradType>
 void cublas_group_gemm_helper(
     T *A,
     T *B,
     T *C,
+    AccumGradType **weight_grad_list,
     int64_t gemm_m,
     int64_t gemm_n,
     int *gemm_k_per_expert,
@@ -126,28 +130,53 @@ void cublas_group_gemm_helper(
     cudaDataType_t Ctype;
     cublasComputeType_t computeType = CUBLAS_COMPUTE_32F;
 
+    float beta;
+
     if (std::is_same<T, float>::value)
     {
         Atype = CUDA_R_32F;
         Btype = CUDA_R_32F;
-        Ctype = CUDA_R_32F;
     }
     else if (std::is_same<T, half>::value)
     {
         Atype = CUDA_R_16F;
         Btype = CUDA_R_16F;
-        Ctype = CUDA_R_16F;
     }
+#ifdef ENABLE_BF16
     else if (std::is_same<T, __nv_bfloat16>::value)
     {
         Atype = CUDA_R_16BF;
         Btype = CUDA_R_16BF;
-        Ctype = CUDA_R_16BF;
+    }
+#endif
+
+    if (C != nullptr)
+    {
+        beta = 0.0f;
+        Ctype = Atype;
+    }
+    else
+    {
+        beta = 1.0f;
+
+        if (std::is_same<AccumGradType, float>::value)
+        {
+            Ctype = CUDA_R_32F;
+        }
+        else if (std::is_same<AccumGradType, half>::value)
+        {
+            Ctype = CUDA_R_16F;
+        }
+#ifdef ENABLE_BF16
+        else if (std::is_same<AccumGradType, __nv_bfloat16>::value)
+        {
+            Ctype = CUDA_R_16BF;
+        }
+#endif
     }
 
     cublasGemmAlgo_t cublas_algo = CUBLAS_GEMM_DEFAULT;
     float alpha = 1.0f;
-    float beta = 0.0f;
 
     int gemm_k[num_experts];
 
