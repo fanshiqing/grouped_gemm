@@ -26,6 +26,8 @@
 
 using torch::Tensor;
 
+bool USE_CUBLAS = false;
+
 namespace groupedgemmformoe {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -71,7 +73,7 @@ Tensor run_group_gemm_helper(Tensor              input_activations,
 
     int sm_ = getSMVersion();
 
-    if (sm_ != 90)
+    if (sm_ != 90 && (USE_CUBLAS == false))
     {
         groupedgemmformoe::MoeGemmRunner<T, WeightType> moe_gemm_runner_;
 
@@ -1023,6 +1025,11 @@ std::tuple<torch::Tensor, torch::Tensor> moe_recover_topK_bwd_op(
     return std::make_tuple(act_grad, prob_grad);
 }
 
+void use_cublas_for_groupedgemm(bool enable)
+{
+    USE_CUBLAS = enable;
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // TORCH_LIBRARY
@@ -1040,6 +1047,7 @@ TORCH_LIBRARY(moe_unit_ops, m)
     m.def("moe_recover_topK_bwd_op", moe_recover_topK_bwd_op);
     // TODO: find a more reasonable repo to place this kernel.
     m.def("sinkhorn", sinkhorn);
+    m.def("use_cublas_for_groupedgemm", use_cublas_for_groupedgemm);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
