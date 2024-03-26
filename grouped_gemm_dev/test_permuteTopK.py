@@ -106,12 +106,10 @@ def permute_topK_test(
         print(probs)
 
     input = input.cuda()
-    input_fp32 = input.detach().to(torch.float32)
     input_ = input.detach()
     indices = indices.to(torch.int32).cuda()
     probs = probs.cuda()
     input.requires_grad_(True)
-    input_fp32.requires_grad_(True)
     input_.requires_grad_(True)
     probs.requires_grad_(True)
 
@@ -120,21 +118,21 @@ def permute_topK_test(
     # PyTorch
     #
     ###################################################################################################################################
-    permuted_tokens_fp32, sorted_indices = permute(input_fp32, indices, num_topK)
     permuted_tokens, sorted_indices = permute(input, indices, num_topK)
     # print("-----------------------------------------------------------------")
     # print(permuted_tokens)
     # print(sorted_indices)
 
     backward_input = torch.rand_like(permuted_tokens)
-    backward_input_fp32 = backward_input.detach().to(torch.float32)
     # for i in range(num_token * num_topK):
     #   for j in range(hidden_size):
     #     backward_input[i][j] = i * 100 + j
     # print(backward_input)
 
-    permuted_tokens_fp32.backward(backward_input_fp32, retain_graph=True)
     permuted_tokens.backward(backward_input, retain_graph=True)
+
+    permuted_tokens = permuted_tokens.detach()
+    permuted_tokens.requires_grad_(True)
 
     unpermuted_tokens = unpermute(
         permuted_tokens, sorted_indices, probs=probs, merge_factor=num_topK)
@@ -184,18 +182,13 @@ def permute_topK_test(
 
     if torch.allclose(input.grad, input_.grad) == False:
         original_inputs = input_.grad.float().cpu().numpy().flatten()
-        original_output = input_fp32.grad.float().cpu().numpy().flatten()
+        original_output = input.grad.float().cpu().numpy().flatten()
         max_abs_error = abs(original_inputs - original_output).max()
-        print(f"permute_topK bwd max error (mine vs FP32): \t\t\t{max_abs_error:.3e} ({dtype})")
+        print(f"permute_topK bwd max error (mine vs pytorch): \t\t\t{max_abs_error:.3e} ({dtype})")
 
-        original_inputs = input.grad.float().cpu().numpy().flatten()
-        original_output = input_fp32.grad.float().cpu().numpy().flatten()
-        max_abs_error = abs(original_inputs - original_output).max()
-        print(f"permute_topK bwd max error (pytorch vs FP32): \t\t\t{max_abs_error:.3e} ({dtype})")
         if PRINT:
             print(input.grad)
             print(input_.grad)
-            print(input_fp32.grad)
 
     probs_mine = probs.detach().clone()
     probs_mine.requires_grad_(True)
@@ -222,11 +215,8 @@ def permute_topK_test(
         max_abs_error = abs(original_inputs - original_output).max()
         print(f"unpermute_topK bwd act_grad max error (mine vs pytorch): \t{max_abs_error:.3e} ({dtype})")
         if PRINT:
-            print(backward_input_unperm)
             print(permuted_act.grad)
             print(permuted_tokens.grad)
-            print(probs_mine.grad)
-            print(probs.grad)
 
     if torch.allclose(probs_mine.grad, probs.grad) == False:
         original_inputs = probs_mine.grad.float().cpu().detach().numpy().flatten()
@@ -248,31 +238,39 @@ def permute_topK_test(
     ###################################################################################################################################
     if BENCHMARK:
         print(f"----permute topK----")
-        t1 = triton.testing.do_bench(lambda: permute(input, indices, 2))
-        print(f"pytorch fwd: {t1:.3f} ms")
-        t2 = triton.testing.do_bench(lambda: permuted_tokens.backward(backward_input, retain_graph=True))
-        print(f"pytorch bwd: {t2:.3f} ms")
+        t = triton.testing.do_bench(lambda: permute(input, indices, 2),
+            warmup=50, rep=200)
+        print(f"pytorch fwd: {t:.3f} ms")
+        t = triton.testing.do_bench(lambda: permuted_tokens.backward(backward_input, retain_graph=True),
+            warmup=50, rep=200)
+        print(f"pytorch bwd: {t:.3f} ms")
 
-        t3 = triton.testing.do_bench(lambda: permute_topK(input_, indices))
-        print(f"mine    fwd: {t3:.3f} ms")
-        t4 = triton.testing.do_bench(
-            lambda: permuted_act.backward(backward_input, retain_graph=True))
-        print(f"mine    bwd: {t4:.3f} ms")
+        t = triton.testing.do_bench(lambda: permute_topK(input_, indices),
+            warmup=50, rep=200)
+        print(f"mine    fwd: {t:.3f} ms")
+        t = triton.testing.do_bench(
+            lambda: permuted_act.backward(backward_input, retain_graph=True),
+            warmup=50, rep=200)
+        print(f"mine    bwd: {t:.3f} ms")
 
         print(f"----unpermute topK----")
-        t3 = triton.testing.do_bench(
-            lambda: unpermute(permuted_tokens, sorted_indices, probs=probs, merge_factor=num_topK))
-        print(f"pytorch fwd: {t3:.3f} ms")
-        t4 = triton.testing.do_bench(
-            lambda: unpermuted_tokens.backward(backward_input_unperm, retain_graph=True))
-        print(f"pytorch bwd: {t4:.3f} ms")
+        t = triton.testing.do_bench(
+            lambda: unpermute(permuted_tokens, sorted_indices, probs=probs, merge_factor=num_topK),
+            warmup=50, rep=200)
+        print(f"pytorch fwd: {t:.3f} ms")
+        t = triton.testing.do_bench(
+            lambda: unpermuted_tokens.backward(backward_input_unperm, retain_graph=True),
+            warmup=50, rep=200)
+        print(f"pytorch bwd: {t:.3f} ms")
 
-        t3 = triton.testing.do_bench(
-            lambda: unpermute_topK(permuted_act, row_id_map, probs_mine))
-        print(f"mine    fwd: {t3:.3f} ms")
-        t4 = triton.testing.do_bench(
-            lambda: unpermuted_act.backward(backward_input_unperm, retain_graph=True))
-        print(f"mine    bwd: {t4:.3f} ms")
+        t = triton.testing.do_bench(
+            lambda: unpermute_topK(permuted_act, row_id_map, probs_mine),
+            warmup=50, rep=200)
+        print(f"mine    fwd: {t:.3f} ms")
+        t = triton.testing.do_bench(
+            lambda: unpermuted_act.backward(backward_input_unperm, retain_graph=True),
+            warmup=50, rep=200)
+        print(f"mine    bwd: {t:.3f} ms")
 
     # perf_test_cuda_kernel(lambda: permute(input, indices, 2))
     # perf_test_cuda_kernel(lambda: permuted_tokens.backward(

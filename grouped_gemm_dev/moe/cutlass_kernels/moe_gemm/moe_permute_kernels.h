@@ -181,99 +181,54 @@ __global__ void moe_recover_topK_kernel(const T *input,
 
     // each block corresponds to one source token
     const int source_token = blockIdx.x;
-
-    const int thread_id = (threadIdx.y << 4) + threadIdx.x;
-    const int warp_id = thread_id >> 5;
-    const int col_offset = threadIdx.x;
-    const int row_offset = threadIdx.y & 0x1;
+    const int tid = threadIdx.x;
 
     if (hasProb)
     {
-        for (int i = thread_id; i < num_topK; i += blockDim.x * blockDim.y)
+        for (int i = tid; i < num_topK; i += blockDim.x * blockDim.y)
         {
             s_prob[i] = T(prob[source_token * num_topK + i]);
         }
         __syncthreads();
     }
 
-    T *dest_row_ptr = unpermuted_output + source_token * num_cols;
-
-    for (int i = (warp_id * 16 + col_offset) * kElementsPerAccess; i < num_cols; i += blockDim.x * blockDim.y / 2 * kElementsPerAccess)
+    for (int i = tid * kElementsPerAccess; i < num_cols; i += blockDim.x * kElementsPerAccess)
     {
         Fragment frag_elem;
         Fragment frag_sum;
+        
+        int source_row = row_id_map[source_token];
+        const T *source_row_ptr = input + source_row * num_cols;
 
-        if (row_offset == 0)
+        cutlass::arch::global_load<Fragment, sizeof(Fragment), cutlass::arch::CacheOperation::LastUse>(
+            frag_sum, (source_row_ptr + i), true);
+
+        if (hasProb)
         {
-            int source_row = row_id_map[source_token];
-            const T *source_row_ptr = input + source_row * num_cols;
-
-            cutlass::arch::global_load<Fragment, sizeof(Fragment), cutlass::arch::CacheOperation::LastUse>(
-                frag_sum, (source_row_ptr + i), true);
-
-            if (hasProb)
-            {
-                frag_sum = frag_sum * s_prob[0];
-            }
+            frag_sum = frag_sum * s_prob[0];
         }
 
-        for (int k = 0; k < (num_topK - 1) / 2; k += 1)
+        for (int k = 1; k < num_topK; k++)
         {
-            int source_row = row_id_map[(2 * k + row_offset + 1) * num_rows + source_token];
-            const T *source_row_ptr = input + source_row * num_cols;
+            source_row = row_id_map[k * num_rows + source_token];
+            source_row_ptr = input + source_row * num_cols;
 
             cutlass::arch::global_load<Fragment, sizeof(Fragment), cutlass::arch::CacheOperation::LastUse>(
                 frag_elem, (source_row_ptr + i), true);
 
             if (hasProb)
             {
-                frag_elem = frag_elem * s_prob[k + row_offset + 1];
+                frag_elem = frag_elem * s_prob[k];
             }
-
-            Fragment temp;
-            double *temp_ptr = (double *)temp.data();
-            temp_ptr[0] = __shfl_down_sync(0xFFFFFFFF,
-                                           *((double *)frag_elem.data()),
-                                           16, 32);
-            temp_ptr[1] = __shfl_down_sync(0xFFFFFFFF,
-                                           *(((double *)frag_elem.data()) + 1),
-                                           16, 32);
-
-            if (row_offset == 0)
+            
+            for (int e = 0; e < kElementsPerAccess; e++)
             {
-                for (int e = 0; e < kElementsPerAccess; e++)
-                {
-                    frag_sum.at(e) = frag_sum.at(e) + frag_elem.at(e) + temp.at(e);
-                }
+                frag_sum.at(e) = frag_sum.at(e) + frag_elem.at(e);
             }
         }
 
-        if ((num_topK & 0x1) == 0)
-        {
-            if (row_offset == 0)
-            {
-                int source_row = row_id_map[(num_topK - 1) * num_rows + source_token];
-                const T *source_row_ptr = input + source_row * num_cols;
-
-                cutlass::arch::global_load<Fragment, sizeof(Fragment), cutlass::arch::CacheOperation::LastUse>(
-                    frag_elem, (source_row_ptr + i), true);
-
-                if (hasProb)
-                {
-                    frag_elem = frag_elem * s_prob[num_topK - 1];
-                }
-
-                for (int e = 0; e < kElementsPerAccess; e++)
-                {
-                    frag_sum.at(e) = frag_sum.at(e) + frag_elem.at(e);
-                }
-            }
-        }
-
-        if(row_offset == 0)
-        {
-            *(float4 *)(dest_row_ptr + i) = *(float4 *)(frag_sum.data());
-        }
+        T *dest_row_ptr = unpermuted_output + source_token * num_cols;
+        *(float4 *)(dest_row_ptr + i) = *(float4 *)(frag_sum.data());
     }
 }
 
@@ -476,8 +431,7 @@ void moe_permute_topK_kernel_launcher(
     else
     {
         int blocks = num_rows;
-        int threads_num = std::min(num_cols / kElementsPerAccess, 1024);
-        dim3 threads(16, (threads_num + 31) / 32 * 2);
+        int threads = std::min(num_cols / kElementsPerAccess, 1024);
         size_t smem_bytes = num_topK * sizeof(T);
 
         if (prob != nullptr)
