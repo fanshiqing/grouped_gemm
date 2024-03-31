@@ -35,7 +35,9 @@ python test_torch_ops.py
 ```
 # Sketch
 
-<p align="center"><img src=figures/figure1.png></p>
+<p align="center"><img src=figures/figure_permute.png></p>
+<p align="center"><img src=figures/figure_unpermute.png></p>
+<p align="center"><img src=figures/figure_groupedgemm.png></p>
 
 # Support Matrix
 
