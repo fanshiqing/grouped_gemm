@@ -51,7 +51,7 @@ __global__ void moe_permute_kernel(const T *original_input,
 
     for (int tid = threadIdx.x * kElementsPerAccess; tid < num_cols; tid += blockDim.x * kElementsPerAccess)
     {
-        cutlass::arch::global_load<float4, sizeof(float4), cutlass::arch::CacheOperation::LastUse>(
+        cutlass::arch::global_load<float4, sizeof(float4)>(
             *(float4 *)(dest_row_ptr + tid), (source_row_ptr + tid), true);
     }
 }
@@ -78,7 +78,7 @@ __global__ void moe_recover_kernel(const T *original_input,
 
     for (int tid = threadIdx.x * kElementsPerAccess; tid < num_cols; tid += blockDim.x * kElementsPerAccess)
     {
-        cutlass::arch::global_load<float4, sizeof(float4), cutlass::arch::CacheOperation::LastUse>(
+        cutlass::arch::global_load<float4, sizeof(float4)>(
             *(float4 *)(dest_row_ptr + tid), (source_row_ptr + tid), true);
     }
 }
