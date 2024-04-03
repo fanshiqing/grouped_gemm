@@ -193,6 +193,17 @@ void cublas_group_gemm_helper(
 
             int i = e % NUM_STREAM;
 
+            void *C_ptr;
+            if (C != nullptr)
+            {
+                C_ptr = reinterpret_cast<void *>(C);
+                C = C + gemm_m * gemm_n;
+            }
+            else
+            {
+                C_ptr = reinterpret_cast<void *>(weight_grad_list[e]);
+            }
+
             cublasGemmEx(
                 cublas_handle[i],
                 trans_B,
@@ -208,7 +219,7 @@ void cublas_group_gemm_helper(
                 Atype,
                 gemm_m,
                 &beta,
-                C,
+                C_ptr,
                 Ctype,
                 gemm_n,
                 computeType,
@@ -216,7 +227,6 @@ void cublas_group_gemm_helper(
 
             A = A + gemm_m * gemm_k[e];
             B = B + gemm_n * gemm_k[e];
-            C = C + gemm_m * gemm_n;
         }
     }
     else
@@ -228,6 +238,17 @@ void cublas_group_gemm_helper(
 
             int i = e % NUM_STREAM;
 
+            void *C_ptr;
+            if (C != nullptr)
+            {
+                C_ptr = reinterpret_cast<void *>(C);
+                C = C + gemm_m * gemm_n;
+            }
+            else
+            {
+                C_ptr = reinterpret_cast<void *>(weight_grad_list[e]);
+            }
+
             cublasGemmEx(
                 cublas_handle[i],
                 trans_A,
@@ -243,7 +264,7 @@ void cublas_group_gemm_helper(
                 Btype,
                 gemm_n,
                 &beta,
-                C,
+                C_ptr,
                 Ctype,
                 gemm_m,
                 computeType,
@@ -251,7 +272,6 @@ void cublas_group_gemm_helper(
 
             A = A + gemm_m * gemm_k[e];
             B = B + gemm_n * gemm_k[e];
-            C = C + gemm_m * gemm_n;
         }
     }
 }

@@ -26,7 +26,7 @@
 
 using torch::Tensor;
 
-bool USE_CUBLAS = false;
+bool USE_CUBLAS = true;
 
 namespace groupedgemmformoe {
 
@@ -73,7 +73,7 @@ Tensor run_group_gemm_helper(Tensor              input_activations,
 
     int sm_ = getSMVersion();
 
-    if (sm_ != 90 && (USE_CUBLAS == false))
+    if ((sm_ != 90) && (USE_CUBLAS == false))
     {
         groupedgemmformoe::MoeGemmRunner<T, WeightType> moe_gemm_runner_;
 
@@ -125,7 +125,7 @@ void group_gemm_varK_algo_dispatcher(T*              A,
 {
     int sm_ = getSMVersion();
 
-    if (sm_ != 90)
+    if ((sm_ != 90) && (USE_CUBLAS == false))
     {
         groupedgemmformoe::MoeGemmRunner<T, WeightType> moe_gemm_runner_;
 
