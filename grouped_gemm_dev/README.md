@@ -9,7 +9,8 @@ Grouped GEMM for MoE
 <div align="left">
 
 - [Steps for Using](#steps-for-using)
-- [Sketch](#sketch)
+  - [pip install](#pip-install)
+  - [Build from Source](#build-from-source)
 - [Support Matrix](#support-matrix)
 - [Ops Usage](#ops-usage)
   - [permute](#permute)
@@ -20,26 +21,42 @@ Grouped GEMM for MoE
 
 # Steps for Using
 
+## pip install
+```bash
+pip install --verbose git+https://github.com/fanshiqing/grouped_gemm@jiangs/groupedgemm_shiqing
+```
+
+## Build from Source
 ```bash
 git submodule update --init --recursive
 mkdir build
 cd build
 cmake ..
-make -j8
+make -j
 cd ..
 
 # unit function test
 python test_unit_func.py
 # pytorch ops test
 python test_torch_ops.py
+# topK permute & unpermute ops test
+python test_permuteTopK.py
 ```
-# Sketch
-
-<p align="center"><img src=figures/figure_permute.png></p>
-<p align="center"><img src=figures/figure_unpermute.png></p>
-<p align="center"><img src=figures/figure_groupedgemm.png></p>
 
 # Support Matrix
+
+## permute & unpermute
+
+| GPU Arch   | FP32  | FP16  | BF16  | FP8   |
+| :--------- | :---: | :---: | :---: | :---: |
+| SM 70      |   Y   |   Y   |   .   |   Y   |
+| SM 75      |   Y   |   Y   |   .   |   Y   |
+| SM 80      |   Y   |   Y   |   Y   |   Y   |
+| SM 86      |   Y   |   Y   |   Y   |   Y   |
+| SM 89      |   Y   |   Y   |   Y   |   Y   |
+| SM 90      |   Y   |   Y   |   Y   |   Y   |
+
+## groupedgemm
 
 | GPU Arch   | FP32  | FP16  | BF16  |
 | :--------- | :---: | :---: | :---: |
@@ -48,6 +65,7 @@ python test_torch_ops.py
 | SM 80      |   Y   |   Y   |   Y   |
 | SM 86      |   Y   |   Y   |   Y   |
 | SM 89      |   Y   |   Y   |   Y   |
+| SM 90      |   Y   |   Y   |   Y   |
 
 # Ops Usage
 
@@ -55,93 +73,107 @@ python test_torch_ops.py
 
 > ```py
 > moe.ops.permute(
->   unpermuted_inputs: torch.Tensor,
->   expert_for_rows: torch.Tensor,
+>   input_act: torch.Tensor,
+>   indices: torch.Tensor,
 >   max_token_num=0: int) -> tuple
 > ```
 
-The output tuple of `(torch.Tensor, torch.Tensor)` that contains two tensors `permuted_inputs` and `row_id_map`.
+The output tuple of `(torch.Tensor, torch.Tensor)` that contains two tensors `permuted_act` and `row_id_map`.
 
-* `permuted_inputs` is a view of the original tensor `unpermuted_inputs` with its first dimension permuted according to `expert_for_rows`.
-* `row_id_map` is the mapping table for the row indices of the input activations before and after `moe.ops.permute`. 
-    &emsp;For example, given an `expert_for_rows` of `[2, 0, 1, 1, 2, 1, 3, 2, 1, 0]`, then it will be permuted to `[0, 0, 1, 1, 1, 1, 2, 2, 2, 3]`.
-    &emsp;The original row indices `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]` will be changed to `[1, 9, 2, 3, 5, 8, 0, 4, 7, 6]`, which is also the value of `row_id_map`, so that `row_id_map[source_row_id] = dest_row_id`.
+* `permuted_act` is the permutation of the original tensor `input_act` with its first dimension permuted according to `indices`.
+* `row_id_map` is the mapping table for the row indices of the input activations before and after `moe.ops.permute`, which is used for the following `unpermute` op.
 
 ### Parameters
 
-* **unpermuted_inputs** (torch.Tensor)  
+* **input_act** (torch.Tensor)  
     &emsp;shape = [tokens_num, hidden_size]  
-    &emsp;The input activations with each row corresponds to a single expert.
+    &emsp;The input activations with each row (token) corresponds to topK experts.
 
-* **expert_for_rows** (torch.Tensor)  
-    &emsp;shape = [tokens_num]  
-    &emsp;The expert index for each row of activations. The `int32` type is recommended.
+* **indices** (torch.Tensor)  
+    &emsp;shape = [tokens_num, topK_num]  
+    &emsp;The topK expert indices for each row (token) of activations. The `int32` type is recommended.
 
 * **max_token_num** (int)  
-    &emsp;The maximum number of tokens (rows) used for workspace allocation.
+    &emsp;The maximum number of tokens (rows) used for workspace pre-allocation.
 
+<p align="center"><img src=figures/figure_permute.png></p>
 
 ## unpermute
 
 > ```py
 > moe.ops.unpermute(
->   permuted_inputs: torch.Tensor,
->   row_id_map: torch.Tensor) -> torch.Tensor
+>   input_act: torch.Tensor,
+>   row_id_map: torch.Tensor,
+>   probs) -> torch.Tensor
 > ```
 
 The mirror operator of `moe.ops.permute`.
 
 ### Parameters
 
-* **permuted_inputs** (torch.Tensor)  
-    &emsp;shape = [tokens_num, hidden_size]  
-    &emsp;The permuted activations output by `moe.ops.permute`.
+* **input_act** (torch.Tensor)  
+    &emsp;shape = [tokens_num * topK_num, hidden_size]  
+    &emsp;The permuted activations produced by `moe.ops.permute`.
 
 * **row_id_map** (torch.Tensor)  
-    &emsp;shape = [tokens_num]  
-    &emsp;The mapping table for the row indices of the original unpermuted activations before and after `moe.ops.permute`. The second output tensor of `moe.ops.permute`.
+    &emsp;shape = [tokens_num * topK_num]  
+    &emsp;The mapping table for the row indices of the activations before and after `moe.ops.permute`. The second output tensor of `moe.ops.permute`.
+
+* **probs** (torch.Tensor)  
+    &emsp;shape = [tokens_num, topK_num]  
+    &emsp;Sum weights for same-origin tokens from different experts.
+
+<p align="center"><img src=figures/figure_unpermute.png></p>
 
 ### Example
 
 ```py
-from grouped_gemm import permute
+import torch
+from grouped_gemm import permute, unpermute
 
-expert_for_rows = torch.tensor([2, 0, 1, 0], dtype=torch.int32, device='cuda')
-unpermuted_inputs = torch.tensor([[0,0,0,0], [1,1,1,1], [2,2,2,2], [3,3,3,3]], dtype=torch.float32, device='cuda')
-permuted_inputs, row_id_map = permute(unpermuted_inputs, expert_for_rows)
-unpermute_outputs = unpermute(permuted_inputs, row_id_map)
+indices = torch.tensor([[1, 2], [0, 1], [0, 2], [1, 2]], dtype=torch.int32, device='cuda')
+input_act = torch.tensor([[0,0,0,0], [1,1,1,1], [2,2,2,2], [3,3,3,3]], dtype=torch.float32, device='cuda')
+probs = torch.ones_like(indices, dtype=torch.float32)
+permuted_inputs, row_id_map = permute(input_act, indices)
+unpermute_outputs = unpermute(permuted_inputs, row_id_map, probs)
 
 print(row_id_map)
-print(unpermuted_inputs)
+print(input_act)
 print(permuted_inputs)
 print(unpermute_outputs)
 
 # Output
-# tensor([1, 3, 2, 0], device='cuda:0', dtype=torch.int32)
+# tensor([2, 0, 1, 4, 5, 3, 6, 7], device='cuda:0', dtype=torch.int32)
 # tensor([[0., 0., 0., 0.],
 #         [1., 1., 1., 1.],
 #         [2., 2., 2., 2.],
 #         [3., 3., 3., 3.]], device='cuda:0')
 # tensor([[1., 1., 1., 1.],
-#         [3., 3., 3., 3.],
 #         [2., 2., 2., 2.],
-#         [0., 0., 0., 0.]], device='cuda:0')
-# tensor([[0., 0., 0., 0.],
+#         [0., 0., 0., 0.],
 #         [1., 1., 1., 1.],
+#         [3., 3., 3., 3.],
+#         [0., 0., 0., 0.],
 #         [2., 2., 2., 2.],
 #         [3., 3., 3., 3.]], device='cuda:0')
+# tensor([[0., 0., 0., 0.],
+#         [2., 2., 2., 2.],
+#         [4., 4., 4., 4.],
+#         [6., 6., 6., 6.]], device='cuda:0')
 ```
 
 ## groupedgemm
 > ```py
 > moe.ops.groupedgemm(
 >   permuted_inputs: torch.Tensor,
->   weights: torch.Tensor,
 >   tokens_per_expert: torch.Tensor,
->   transB=False: bool) -> torch.Tensor
+>   weights_list: list,
+>   transB=False: bool,
+>   gradient_accumulation_fusion=False: bool
+> ) -> torch.Tensor
 > ```
 
-Matrix product of two tensors `permuted_inputs` and `weights` for each expert.
+Grouped matrix product of two tensors activations and weights for each expert.
 
 ### Parameters
 
@@ -149,14 +181,19 @@ Matrix product of two tensors `permuted_inputs` and `weights` for each expert.
     &emsp;shape = [tokens_num, hidden_size]  
     &emsp;The permuted input activations with each row sorted according to expert id via `moe.ops.permute`.
 
-* **weights** (torch.Tensor)  
-    &emsp;shape = [experts_num, hidden_size, inter_size] for `transB = False`  
-    &emsp;shape = [experts_num, inter_size, hidden_size] for `transB = True`  
-    &emsp;Weight matrices for each expert.
-
 * **tokens_per_expert** (torch.Tensor)  
     &emsp;shape = [num_experts]  
     &emsp;The number of tokens for each expert. The `int32` type is recommended.
 
+* **weights_list** (list)  
+    &emsp;experts_num x [hidden_size, inter_size] for `transB = False`  
+    &emsp;experts_num x [inter_size, hidden_size] for `transB = True`  
+    &emsp;A list of weight tensors for each expert.
+
 * **transB** (bool)  
-    &emsp;Whether to transpose `Weights`.
+    &emsp;Whether to transpose weight tensor.
+
+* **gradient_accumulation_fusion** (bool)  
+    &emsp;Whether to do gradient accumulation. If this is set, we are assuming that each input weight tensor in `weights_list` has a `main_grad` field.
+
+<p align="center"><img src=figures/figure_groupedgemm.png></p>
