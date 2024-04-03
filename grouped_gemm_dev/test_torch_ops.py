@@ -37,8 +37,10 @@ class TestMoeOps(unittest.TestCase):
                          PRINT):
 
     # Prepare inputs
-    _1_expert_for_rows = torch.randint(size=(num_rows,),low=0,high=num_experts, dtype=torch.int32).cuda()
-    _2_expert_for_rows = torch.randint(size=(num_rows,),low=0,high=num_experts, dtype=torch.int32).cuda()
+    _1_expert_for_rows = torch.randint(size=(num_rows,),low=0,high=num_experts, dtype=torch.int32).cuda().unsqueeze(-1)
+    _2_expert_for_rows = torch.randint(size=(num_rows,),low=0,high=num_experts, dtype=torch.int32).cuda().unsqueeze(-1)
+    _probs = torch.ones_like(_1_expert_for_rows, dtype=torch.float32)
+
     # unpermuted_inputs = torch.rand(size=(num_rows, num_cols), dtype=torch.float32).type(dtype).cuda()
     # unpermuted_inputs = torch.randint(size=(num_rows, num_cols), low=0, high=400, dtype=torch.int32).type(dtype).cuda()
     unpermuted_inputs = torch.empty(size=(num_rows, num_cols), dtype=torch.float32)
@@ -62,7 +64,7 @@ class TestMoeOps(unittest.TestCase):
       # expert_for_rows = torch.nn.functional.pad(expert_for_rows, [0, 1])
 
       nvtx.range_push("unpermute op forward")
-      _1_unpermute_outputs = unpermute(_1_permuted_inputs, _1_row_id_map)
+      _1_unpermute_outputs = unpermute(_1_permuted_inputs, _1_row_id_map, _probs)
       nvtx.range_pop()
 
       nvtx.range_push("permute op forward")
@@ -70,7 +72,7 @@ class TestMoeOps(unittest.TestCase):
       nvtx.range_pop()
 
       nvtx.range_push("unpermute op forward")
-      _2_unpermute_outputs = unpermute(_2_permuted_inputs, _2_row_id_map)
+      _2_unpermute_outputs = unpermute(_2_permuted_inputs, _2_row_id_map, _probs)
       nvtx.range_pop()
 
       # Reset grad to avoid accumulation

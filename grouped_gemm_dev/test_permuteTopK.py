@@ -11,8 +11,7 @@ try:
 except ImportError:
   print("grouped-gemm toolkit is not installed. Fall back to local import.")
   # For local debug
-  from moe.ops import permute_topK, unpermute_topK
-  from moe.ops import permute as permute_original, unpermute as unpermute_original
+  from moe.ops import permute as permute_topK, unpermute as unpermute_topK
 
 def permute(tokens, indices, expand_factor: int = 1, is_fp8=False):
     """Permute the tokens based on the indices.
@@ -248,37 +247,16 @@ def permute_topK_test(
                 i.grad = None
         return act.backward(backward_input, retain_graph=retain_graph)
 
-    # old impl
-    old_permute_input = permute_input.detach().repeat(num_topK, 1).to(dtype)
-    old_permute_input.requires_grad_(True)
-    expert_for_rows = indices.detach().flatten()
-    old_permute_bwd_input = permute_bwd_input.detach().to(dtype)
-    old_unpermute_bwd_input = unpermute_bwd_input.detach().repeat(num_topK, 1).to(dtype)
-
-    old_permute_output, old_row_id_map = permute_original(old_permute_input, expert_for_rows)
-    old_permute_output.backward(old_permute_bwd_input, retain_graph=True)
-
-    old_unpermute_input = old_permute_output.detach()
-    old_unpermute_input.requires_grad_(True)
-    
-    old_unpermute_outputs = unpermute_original(old_unpermute_input, old_row_id_map)
-    old_unpermute_outputs.backward(old_unpermute_bwd_input, retain_graph=True)
-
     if BENCHMARK:
         print(f"----permute topK----")
         t = perf_test_cuda_kernel(lambda: permute(permute_input, indices, 2))
         print(f"pytorch fwd: {t:.3f} ms")
-        t = perf_test_cuda_kernel(lambda: permute_original(old_permute_input, expert_for_rows))
-        print(f"old     fwd: {t:.3f} ms")
         t = perf_test_cuda_kernel(lambda: permute_topK(new_permute_input, indices))
         print(f"new     fwd: {t:.3f} ms")
 
         t = perf_test_cuda_kernel(
             lambda: backward_wrapper(permute_output, permute_bwd_input, forward_input=[permute_input], retain_graph=True, accumulate_grad=False))
         print(f"pytorch bwd: {t:.3f} ms")
-        t = perf_test_cuda_kernel(
-            lambda: backward_wrapper(old_permute_output, old_permute_bwd_input, forward_input=[old_permute_input], retain_graph=True, accumulate_grad=False))
-        print(f"old     bwd: {t:.3f} ms")
         t = perf_test_cuda_kernel(
             lambda: backward_wrapper(new_permute_output, new_permute_bwd_input, forward_input=[new_permute_input], retain_graph=True, accumulate_grad=False))
         print(f"new     bwd: {t:.3f} ms")
@@ -288,18 +266,12 @@ def permute_topK_test(
             lambda: unpermute(unpermute_input, sorted_indices, probs=probs, merge_factor=num_topK))
         print(f"pytorch fwd: {t:.3f} ms")
         t = perf_test_cuda_kernel(
-            lambda: unpermute_original(old_unpermute_input, old_row_id_map))
-        print(f"old     fwd: {t:.3f} ms")
-        t = perf_test_cuda_kernel(
             lambda: unpermute_topK(new_unpermute_input, row_id_map, new_probs))
         print(f"new     fwd: {t:.3f} ms")
 
         t = perf_test_cuda_kernel(
             lambda: backward_wrapper(unpermute_output, unpermute_bwd_input, forward_input=[unpermute_input, probs], retain_graph=True, accumulate_grad=False))
         print(f"pytorch bwd: {t:.3f} ms")
-        t = perf_test_cuda_kernel(
-            lambda: backward_wrapper(old_unpermute_outputs, old_unpermute_bwd_input, forward_input=[old_unpermute_input], retain_graph=True, accumulate_grad=False))
-        print(f"old     bwd: {t:.3f} ms")
         t = perf_test_cuda_kernel(
             lambda: backward_wrapper(new_unpermute_output, new_unpermute_bwd_input, forward_input=[new_unpermute_input, new_probs], retain_graph=True, accumulate_grad=False))
         print(f"new     bwd: {t:.3f} ms")
