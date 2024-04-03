@@ -134,38 +134,6 @@ __global__ void moe_permute_topK_row_map(const int *sorted_row_id,
     row_id_map[source_topK_id * num_rows + source_token_id] = idx;
 }
 
-
-template <typename T, int kElementsPerAccess>
-__global__ void moe_permute_topK_kernel(const T *input,
-                                              T *permuted_output,
-                                              const int *row_id_map,
-                                              const int num_rows,
-                                              const int num_topK,
-                                              const int num_cols)
-{
-    // permute activations rows based on experts
-
-    const int source_token = blockIdx.x;
-
-    const T *source_row_ptr = input + source_token * num_cols;
-    for (int i = threadIdx.x * kElementsPerAccess; i < num_cols; i += blockDim.x * kElementsPerAccess)
-    {
-        float4 elements;
-        cutlass::arch::global_load<float4, sizeof(float4), cutlass::arch::CacheOperation::LastUse>(
-            elements, (source_row_ptr + i), true);
-
-        int index = source_token;
-        for (int k = 0; k < num_topK; k++)
-        {
-            int dest_row = row_id_map[index];
-            index += num_rows;
-
-            T *dest_row_ptr = permuted_output + dest_row * num_cols;
-            *(float4 *)(dest_row_ptr + i) = elements;
-        }
-    }
-}
-
 template <typename T, typename TCompute, int kElementsPerAccess, bool hasProb>
 __global__ void moe_recover_topK_kernel(const T *input,
                                         T *unpermuted_output,
@@ -241,16 +209,20 @@ __global__ void moe_recover_topK_kernel(const T *input,
     }
 }
 
-template <typename T, typename TCompute, int kElementsPerAccess, int topKTile>
-__global__ void moe_recover_topK_bwd_kernel(const T *input_bwd,
-                                            const T *input_fwd,
-                                            T *act_grad,
-                                            const float *prob,
-                                            float *prob_grad,
-                                            const int *row_id_map,
-                                            const int num_rows,
-                                            const int num_topK,
-                                            const int num_cols)
+template <typename T,
+          typename TCompute,
+          int kElementsPerAccess,
+          int topKTile,
+          bool hasProb>
+__global__ void moe_permute_topK_kernel(const T *input_bwd,
+                                        const T *input_fwd,
+                                        T *act_grad,
+                                        const float *prob,
+                                        float *prob_grad,
+                                        const int *row_id_map,
+                                        const int num_rows,
+                                        const int num_topK,
+                                        const int num_cols)
 {
     extern __shared__ int8_t s_mem[];
     TCompute *s_prob = reinterpret_cast<TCompute *>(s_mem);
@@ -264,11 +236,14 @@ __global__ void moe_recover_topK_bwd_kernel(const T *input_bwd,
     const int source_token = blockIdx.x;
     const int tid = threadIdx.x;
 
-    for (int i = tid; i < num_topK; i += blockDim.x)
+    if (hasProb)
     {
-        s_prob[i] = TCompute(prob[source_token * num_topK + i]);
+        for (int i = tid; i < num_topK; i += blockDim.x)
+        {
+            s_prob[i] = TCompute(prob[source_token * num_topK + i]);
+        }
+        __syncthreads();
     }
-    __syncthreads();
 
     float accum[topKTile] = {0.0f};
     FragmentLoadStore frag_load_store;
@@ -289,42 +264,53 @@ __global__ void moe_recover_topK_bwd_kernel(const T *input_bwd,
             int dest_row = row_id_map[index];
             index += num_rows;
 
-            FragmentCompute frag_dst = frag_src * s_prob[k];
+            if (hasProb)
+            {
+                frag_load_store = dst_converter(frag_src * s_prob[k]);
+            }
+            else
+            {
+                frag_load_store = dst_converter(frag_src);
+            }
 
             T *dest_row_ptr = act_grad + dest_row * num_cols;
-            const T *input_fwd_ptr = input_fwd + dest_row * num_cols;
-
-            cutlass::arch::global_load<FragmentLoadStore, sizeof(FragmentLoadStore), cutlass::arch::CacheOperation::LastUse>(
-                frag_load_store, (input_fwd_ptr + i), true);
-            FragmentCompute frag_input_fwd = src_converter(frag_load_store);
-
-            for (int e = 0; e < kElementsPerAccess; e++)
-            {
-                accum[k] += float(frag_src.at(e) * frag_input_fwd.at(e));
-            }
-            
-            frag_load_store = dst_converter(frag_dst);
             *(float4 *)(dest_row_ptr + i) = *(float4 *)(frag_load_store.data());
+
+            if (hasProb)
+            {
+                const T *input_fwd_ptr = input_fwd + dest_row * num_cols;
+                cutlass::arch::global_load<FragmentLoadStore, sizeof(FragmentLoadStore), cutlass::arch::CacheOperation::LastUse>(
+                    frag_load_store, (input_fwd_ptr + i), true);
+                FragmentCompute frag_input_fwd = src_converter(frag_load_store);
+
+                for (int e = 0; e < kElementsPerAccess; e++)
+                {
+                    accum[k] += float(frag_src.at(e) * frag_input_fwd.at(e));
+                }
+            }
         }
     }
 
-    for (int k = 0; k < topKTile; k++)
-    {
-        if (k == num_topK) break;
-
-        for (int mask = 16; mask > 0; mask /= 2)
-        {
-            accum[k] = accum[k] + __shfl_xor_sync(0xffffffff, accum[k], mask, 32);
-        }
-    }
-
-    if (tid == 0)
+    if (hasProb)
     {
         for (int k = 0; k < topKTile; k++)
         {
             if (k == num_topK) break;
-            prob_grad[source_token * num_topK + k] = accum[k];
-        }  
+
+            for (int mask = 16; mask > 0; mask /= 2)
+            {
+                accum[k] = accum[k] + __shfl_xor_sync(0xffffffff, accum[k], mask, 32);
+            }
+        }
+
+        if (tid == 0)
+        {
+            for (int k = 0; k < topKTile; k++)
+            {
+                if (k == num_topK) break;
+                prob_grad[source_token * num_topK + k] = accum[k];
+            }  
+        }
     }
 }
 
@@ -357,9 +343,12 @@ void moe_permute_topK_kernel_launcher(
 
             blocks = num_rows;
             threads = std::min(num_cols / kElementsPerAccess, 1024);
-            moe_permute_topK_kernel<T, kElementsPerAccess><<<blocks, threads, 0, stream>>>(
+            moe_permute_topK_kernel<T, T, kElementsPerAccess, 128, false><<<blocks, threads, 0, stream>>>(
                 input,
+                nullptr,
                 output,
+                nullptr,
+                nullptr,
                 row_id_map,
                 num_rows,
                 num_topK,
@@ -372,9 +361,22 @@ void moe_permute_topK_kernel_launcher(
             int threads = 32;
             size_t smem_bytes = num_topK * sizeof(TCompute);
 
-            if (num_topK <= 8)
+            if (num_topK == 1)
             {
-                moe_recover_topK_bwd_kernel<T, TCompute, kElementsPerAccess, 8><<<blocks, threads, smem_bytes, stream>>>(
+                moe_permute_topK_kernel<T, T, kElementsPerAccess, 1, false><<<blocks, threads, 0, stream>>>(
+                    input,
+                    input_fwd,
+                    output,
+                    prob,
+                    prob_grad,
+                    row_id_map,
+                    num_rows,
+                    num_topK,
+                    num_cols);
+            }
+            else if (num_topK <= 8)
+            {
+                moe_permute_topK_kernel<T, TCompute, kElementsPerAccess, 8, true><<<blocks, threads, smem_bytes, stream>>>(
                     input,
                     input_fwd,
                     output,
@@ -387,7 +389,7 @@ void moe_permute_topK_kernel_launcher(
             }
             else if (num_topK <= 16)
             {
-                moe_recover_topK_bwd_kernel<T, TCompute, kElementsPerAccess, 16><<<blocks, threads, smem_bytes, stream>>>(
+                moe_permute_topK_kernel<T, TCompute, kElementsPerAccess, 16, true><<<blocks, threads, smem_bytes, stream>>>(
                     input,
                     input_fwd,
                     output,
@@ -400,7 +402,7 @@ void moe_permute_topK_kernel_launcher(
             }
             else if (num_topK <= 32)
             {
-                moe_recover_topK_bwd_kernel<T, TCompute, kElementsPerAccess, 32><<<blocks, threads, smem_bytes, stream>>>(
+                moe_permute_topK_kernel<T, TCompute, kElementsPerAccess, 32, true><<<blocks, threads, smem_bytes, stream>>>(
                     input,
                     input_fwd,
                     output,
@@ -413,7 +415,7 @@ void moe_permute_topK_kernel_launcher(
             }
             else if (num_topK <= 64)
             {
-                moe_recover_topK_bwd_kernel<T, TCompute, kElementsPerAccess, 64><<<blocks, threads, smem_bytes, stream>>>(
+                moe_permute_topK_kernel<T, TCompute, kElementsPerAccess, 64, true><<<blocks, threads, smem_bytes, stream>>>(
                     input,
                     input_fwd,
                     output,
@@ -426,7 +428,7 @@ void moe_permute_topK_kernel_launcher(
             }
             else if (num_topK <= 128)
             {
-                moe_recover_topK_bwd_kernel<T, TCompute, kElementsPerAccess, 128><<<blocks, threads, smem_bytes, stream>>>(
+                moe_permute_topK_kernel<T, TCompute, kElementsPerAccess, 128, true><<<blocks, threads, smem_bytes, stream>>>(
                     input,
                     input_fwd,
                     output,
@@ -449,7 +451,20 @@ void moe_permute_topK_kernel_launcher(
         int threads = std::min(num_cols / kElementsPerAccess, 1024);
         size_t smem_bytes = num_topK * sizeof(TCompute);
 
-        if ((prob == nullptr) || (num_topK == 1))
+
+        if (num_topK == 1)
+        {
+            // permute_topK bwd with topK==1
+            moe_recover_topK_kernel<T, T, kElementsPerAccess, false><<<blocks, threads, smem_bytes, stream>>>(
+                input,
+                output,
+                row_id_map,
+                prob,
+                num_rows,
+                num_topK,
+                num_cols);
+        }
+        else if (prob == nullptr)
         {
             // permute_topK bwd
             moe_recover_topK_kernel<T, TCompute, kElementsPerAccess, false><<<blocks, threads, smem_bytes, stream>>>(
