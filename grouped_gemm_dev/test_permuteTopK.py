@@ -7,7 +7,7 @@ import triton
 import torch.cuda.nvtx as nvtx
 
 try:
-  from grouped_gemm import permute_topK, unpermute_topK
+  from grouped_gemm import permute as permute_topK, unpermute as unpermute_topK
 except ImportError:
   print("grouped-gemm toolkit is not installed. Fall back to local import.")
   # For local debug

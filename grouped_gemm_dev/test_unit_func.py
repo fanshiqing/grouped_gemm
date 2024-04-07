@@ -76,8 +76,8 @@ class TestMoe(unittest.TestCase):
     torch.manual_seed(734876213)
     self.moe_group_gemm_op = torch.ops.moe_unit_ops.moe_group_gemm_op
     self.moe_group_gemm_backward_op = torch.ops.moe_unit_ops.moe_group_gemm_backward_op
-    self.moe_permute_op = torch.ops.moe_unit_ops.moe_permute_op
-    self.moe_recover_op = torch.ops.moe_unit_ops.moe_recover_op
+    self.moe_permute_op = torch.ops.moe_unit_ops.moe_permute_topK_op
+    self.moe_recover_op = torch.ops.moe_unit_ops.moe_recover_topK_op
 
   def run_ref_moe_shao(self, input_dict, backward: bool = False):
     if backward:
@@ -103,7 +103,8 @@ class TestMoe(unittest.TestCase):
     if PRINT:
       print("\n----------------------------------------- test_moe_permute -----------------------------------------")
 
-    expert_for_rows = torch.randint(size=(num_rows,),low=0,high=num_experts, dtype=torch.int32).cuda()
+    expert_for_rows = torch.randint(size=(num_rows,),low=0,high=num_experts, dtype=torch.int32).cuda().unsqueeze(-1)
+    probs = torch.ones_like(expert_for_rows, dtype=torch.float32)
 
     if PRINT:
       print("expert_for_rows: {}".format(expert_for_rows))
@@ -120,13 +121,13 @@ class TestMoe(unittest.TestCase):
     original_inputs = unpermuted_inputs.detach()
 
     for _ in range(warmup_times):
-      permuted_inputs, row_id_map, _ = self.moe_permute_op(unpermuted_inputs, expert_for_rows, None, [], num_rows)
+      permuted_inputs, row_id_map, _ = self.moe_permute_op(unpermuted_inputs, expert_for_rows, [], num_rows)
 
     nvtx.range_push("permute test")
     nvtx.range_push("permute op")
     start_time = time.perf_counter()
     for _ in range(execution_times):
-      permuted_inputs, row_id_map, _ = self.moe_permute_op(unpermuted_inputs, expert_for_rows, None, [], num_rows)
+      permuted_inputs, row_id_map, _ = self.moe_permute_op(unpermuted_inputs, expert_for_rows, [], num_rows)
     end_time = time.perf_counter()
     elapsed_time = (end_time - start_time) / execution_times * 1000
     nvtx.range_pop()
@@ -139,7 +140,7 @@ class TestMoe(unittest.TestCase):
     nvtx.range_push("unpermute op")
     start_time = time.perf_counter()
     for _ in range(execution_times):
-      original_output = self.moe_recover_op(permuted_inputs, row_id_map)
+      original_output = self.moe_recover_op(permuted_inputs, row_id_map, probs, num_rows, 1)
     end_time = time.perf_counter()
     elapsed_time = (end_time - start_time) / execution_times * 1000
     nvtx.range_pop()
@@ -205,7 +206,7 @@ class TestMoe(unittest.TestCase):
 
     nvtx.range_push("grouped gemm fwd test")
     nvtx.range_push("permute op")
-    permuted_inputs, row_id_map, _ = self.moe_permute_op(inputs["input_activations"], inputs["expert_for_rows"], None, [], num_rows)
+    permuted_inputs, row_id_map, _ = self.moe_permute_op(inputs["input_activations"], inputs["expert_for_rows"].unsqueeze(-1), [], num_rows)
     nvtx.range_pop()
 
     if PRINT:
@@ -237,8 +238,9 @@ class TestMoe(unittest.TestCase):
     )
     nvtx.range_pop()
 
+    probs = torch.ones_like(inputs["expert_for_rows"].unsqueeze(-1), dtype=torch.float32)
     nvtx.range_push("unpermute op")
-    original_output = self.moe_recover_op(gemm1_output, row_id_map)
+    original_output = self.moe_recover_op(gemm1_output, row_id_map, probs, num_rows, 1)
     nvtx.range_pop()
     nvtx.range_pop()
 
@@ -316,7 +318,7 @@ class TestMoe(unittest.TestCase):
     nvtx.range_push("grouped gemm bwd test")
     nvtx.range_push("permute op")
     # Permutation on activations based on expert id
-    inputs["permuted_inputs"], row_id_map, _ = self.moe_permute_op(inputs["input_activations"], inputs["expert_for_rows"], None, [], num_rows)
+    inputs["permuted_inputs"], row_id_map, _ = self.moe_permute_op(inputs["input_activations"], inputs["expert_for_rows"].unsqueeze(-1), [], num_rows)
     nvtx.range_pop()
 
     if PRINT:
@@ -341,7 +343,8 @@ class TestMoe(unittest.TestCase):
         inputs["permuted_inputs"],
         input_dict["fc1_expert_weights_for_ft"],
         rows_per_expert,
-        False)
+        False,
+        [])
     nvtx.range_pop()
     nvtx.range_pop()
 

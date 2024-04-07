@@ -53,15 +53,9 @@ class TestMoeOps(unittest.TestCase):
     # Build network
     for _ in range(execution_times):
       # Forward
-      # shape mismatch test
-      # expert_for_rows = torch.nn.functional.pad(expert_for_rows, [0, 1])
-
       nvtx.range_push("permute op forward")
       _1_permuted_inputs, _1_row_id_map = permute(unpermuted_inputs, _1_expert_for_rows, max_token_num)
       nvtx.range_pop()
-
-      # shape mismatch test
-      # expert_for_rows = torch.nn.functional.pad(expert_for_rows, [0, 1])
 
       nvtx.range_push("unpermute op forward")
       _1_unpermute_outputs = unpermute(_1_permuted_inputs, _1_row_id_map, _probs)
