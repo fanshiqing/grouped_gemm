@@ -1,12 +1,10 @@
-#include "sinkhorn.h"
+/*************************************************************************
+ * Copyright (c) 2022-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ *
+ * See LICENSE for license information.
+ ************************************************************************/
 
-#include <ATen/cuda/CUDAContext.h>
-#include <torch/extension.h>
-#include <stdio.h>
-
-#include <cmath>
-
-namespace grouped_gemm {
+#include "extensions.h"
 
 __global__ void sinkhorn_kernel(float *cost, const int rows, const int cols, float tol) {
     assert(rows >= cols && cols < blockDim.x);
@@ -95,7 +93,7 @@ void sinkhorn_launch(float *cost, int rows, int cols, float tol) {
 }
 
 // Wrapper function
-torch::Tensor sinkhorn(torch::Tensor cost, const float tol) {
+torch::Tensor sinkhorn(torch::Tensor cost, const double tol) {
     sinkhorn_launch(cost.data_ptr<float>(), cost.size(0), cost.size(1), tol);
 
     cudaError_t err = cudaGetLastError();
@@ -104,5 +102,3 @@ torch::Tensor sinkhorn(torch::Tensor cost, const float tol) {
     }
     return cost;
 }
-
-}  // namespace grouped_gemm

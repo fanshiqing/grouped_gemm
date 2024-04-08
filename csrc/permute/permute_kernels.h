@@ -11,16 +11,11 @@
 #include "cutlass/array.h"
 #include "cutlass/numeric_conversion.h"
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
-//
-// Top K
-//
-/////////////////////////////////////////////////////////////////////////////////////////////////
-
-__global__ void moe_permute_topK_row_map(const int *sorted_row_id,
-                                         int *row_id_map,
-                                         const int num_rows,
-                                         const int num_topK)
+static __global__ void moe_permute_topK_row_map(
+    const int *sorted_row_id,
+    int *row_id_map,
+    const int num_rows,
+    const int num_topK)
 {
     // Each block corresponds to one source token
     // row_id_map[num_topK][num_rows]

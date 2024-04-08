@@ -6,8 +6,14 @@ import unittest
 import itertools
 
 from absl.testing import parameterized
-from grouped_gemm import sinkhorn_kernel
-import numpy as np
+
+try:
+  from grouped_gemm import sinkhorn_kernel
+except ImportError:
+  print("grouped-gemm toolkit is not installed. Fall back to local import.")
+  # For local debug
+  from ops import sinkhorn_kernel
+
 import torch
 
 # Notes: the source of this func implementation:
@@ -64,7 +70,7 @@ class OpsTest(parameterized.TestCase):
         print("===================================")
         print("Problem size: [%d]x[%d], kernel speedup: %fX" % (m, k, baseline_time/kernel_time))
         print("===================================")
-        self.assertTrue(ops_test.allclose(out, expected_out))
+        self.assertTrue(torch.allclose(out, expected_out))
 
 if __name__ == '__main__':
     unittest.main()

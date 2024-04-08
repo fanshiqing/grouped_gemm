@@ -8,11 +8,12 @@
 
 #define NUM_STREAM 4
 
-cublasHandle_t cublas_handle[NUM_STREAM];
-cudaStream_t cublas_stream[NUM_STREAM];
-bool cublas_init = false;
+extern bool USE_CUBLAS;
+extern bool cublas_init;
+extern cublasHandle_t cublas_handle[NUM_STREAM];
+extern cudaStream_t cublas_stream[NUM_STREAM];
 
-void cublas_handle_init()
+inline void cublas_handle_init()
 {
     cublas_init = true;
 

@@ -7,7 +7,7 @@ import os
 from sys import stderr
 import torch.cuda.nvtx as nvtx
 
-so_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/build'
+so_dir = os.path.dirname(os.path.abspath(__file__)) + '/csrc/build'
 torch.classes.load_library(so_dir + '/libmoe_unit_ops.so')
 
 # TODO by Jiang Shao, add parameter `out` which can be optionally given to be used as output buffers.
@@ -203,7 +203,6 @@ class UnpermuteMoE_topK(torch.autograd.Function):
       prob_grad = None
     nvtx.range_pop()
     return act_grad, None, prob_grad
-
 
 ################################################################################################
 ##

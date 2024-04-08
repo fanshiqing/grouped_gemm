@@ -15,7 +15,7 @@ try:
 except ImportError:
   print("grouped-gemm toolkit is not installed. Fall back to local import.")
   # For local debug
-  torch.classes.load_library("./build/libmoe_unit_ops.so")
+  torch.classes.load_library("./csrc/build/libmoe_unit_ops.so")
 
 
 def random_cuda_tensor(shape, dtype, mean=0, std=1):

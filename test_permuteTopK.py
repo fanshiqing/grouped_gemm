@@ -11,7 +11,7 @@ try:
 except ImportError:
   print("grouped-gemm toolkit is not installed. Fall back to local import.")
   # For local debug
-  from moe.ops import permute as permute_topK, unpermute as unpermute_topK
+  from ops import permute as permute_topK, unpermute as unpermute_topK
 
 def permute(tokens, indices, expand_factor: int = 1, is_fp8=False):
     """Permute the tokens based on the indices.
