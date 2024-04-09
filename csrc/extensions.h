@@ -4,6 +4,7 @@
  * See LICENSE for license information.
  ************************************************************************/
 
+#include <cstdint> // uint8_t type on AMD cpus
 #include <ATen/cuda/CUDAContext.h>
 #include <torch/torch.h>
 #include <cub/cub.cuh>

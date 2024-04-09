@@ -6,12 +6,13 @@
 
 #pragma once
 
+#include "extensions.h"
+
 #include "cutlass/arch/memory.h"
 #include "cutlass/arch/cache_operation.h"
 #include "cutlass/array.h"
 #include "cutlass/numeric_conversion.h"
 
-#include "extensions.h"
 
 static __global__ void moe_permute_topK_row_map(
     const int *sorted_row_id,
