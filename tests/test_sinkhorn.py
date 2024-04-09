@@ -7,11 +7,13 @@ import unittest
 from absl.testing import parameterized
 
 try:
-  from grouped_gemm import sinkhorn
+  from grouped_gemm.ops import sinkhorn
 except ImportError:
   print("grouped-gemm toolkit is not installed. Fall back to local import.")
   # For local debug
-  from ..ops import sinkhorn
+  import sys
+  sys.path.append("..")
+  from ops import sinkhorn
 
 import torch
 

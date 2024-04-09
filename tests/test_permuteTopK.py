@@ -7,11 +7,13 @@ import triton
 import torch.cuda.nvtx as nvtx
 
 try:
-  from grouped_gemm import permute as permute_topK, unpermute as unpermute_topK
+  from grouped_gemm.ops import permute as permute_topK, unpermute as unpermute_topK
 except ImportError:
   print("grouped-gemm toolkit is not installed. Fall back to local import.")
   # For local debug
-  from ..ops import permute as permute_topK, unpermute as unpermute_topK
+  import sys
+  sys.path.append("..")
+  from ops import permute as permute_topK, unpermute as unpermute_topK
 
 def permute(tokens, indices, expand_factor: int = 1, is_fp8=False):
     """Permute the tokens based on the indices.

@@ -8,11 +8,13 @@ import torch.cuda.nvtx as nvtx
 import triton
 
 try:
-  from grouped_gemm import permute, unpermute, groupedgemm, set_grouped_gemm_algo
+  from grouped_gemm.ops import permute, unpermute, groupedgemm, set_grouped_gemm_algo
 except ImportError:
   print("grouped-gemm toolkit is not installed. Fall back to local import.")
   # For local debug
-  from ..ops import permute, unpermute, groupedgemm, set_grouped_gemm_algo
+  import sys
+  sys.path.append("..")
+  from ops import permute, unpermute, groupedgemm, set_grouped_gemm_algo
 
 
 class TestMoeOps(unittest.TestCase):
@@ -296,7 +298,7 @@ class TestMoeOps(unittest.TestCase):
     PRINT =                        False
     BENCHMARK =                    False
 
-    set_grouped_gemm_algo(False)
+    set_grouped_gemm_algo(True)
 
     print()
     transB = False
