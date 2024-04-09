@@ -9,9 +9,7 @@
 #include "cutlass/arch/arch.h"
 #include "cutlass/arch/mma.h"
 #include "cutlass/bfloat16.h"
-#include "cutlass/cutlass.h"
 #include "cutlass/gemm/gemm.h"
-#include "cutlass/layout/matrix.h"
 
 namespace cutlass {
 namespace gemm {
@@ -24,18 +22,11 @@ struct MixedGemmArchTraits {
 
 template<typename TypeC, typename arch>
 struct MixedGemmArchTraits<float, float, TypeC, arch> {
-    static constexpr int Stages = 2;
-    using OperatorClass         = cutlass::arch::OpClassSimt;
-    using AccType               = float;
-    using LayoutB               = cutlass::layout::RowMajor;
-
     static constexpr int ElementsPerAccessA = 1;
     static constexpr int ElementsPerAccessB = 1;
     static constexpr int ElementsPerAccessC = 1;
-    static constexpr int ThreadblockK       = 8;
+    using OperatorClass                     = cutlass::arch::OpClassSimt;
     using InstructionShape                  = cutlass::gemm::GemmShape<1, 1, 1>;
-
-    using Operator = cutlass::arch::OpMultiplyAdd;
 };
 
 // ========================= Volta Traits ===========================
@@ -53,16 +44,11 @@ struct MixedGemmArchTraits<
                                           || cutlass::platform::is_same<TypeA, cutlass::bfloat16_t>::value>::type> {
 
 public:
-    static constexpr int ThreadblockK = 64;
-
-    using OperatorClass = cutlass::arch::OpClassTensorOp;
-
     static constexpr int ElementsPerAccessA = 128 / cutlass::sizeof_bits<TypeA>::value;
-    static constexpr int ElementsPerAccessB = 8;
+    static constexpr int ElementsPerAccessB = 128 / cutlass::sizeof_bits<TypeB>::value;
     static constexpr int ElementsPerAccessC = 128 / cutlass::sizeof_bits<TypeC>::value;
+    using OperatorClass                     = cutlass::arch::OpClassTensorOp;
     using InstructionShape                  = cutlass::gemm::GemmShape<8, 8, 4>;
-
-    using Operator = cutlass::arch::OpMultiplyAdd;
 };
 
 // ======================= Turing Traits ==============================
@@ -78,16 +64,11 @@ struct MixedGemmArchTraits<
                                           || cutlass::platform::is_same<TypeA, cutlass::bfloat16_t>::value>::type> {
 
 public:
-    static constexpr int ThreadblockK = 64;
-
-    using OperatorClass = cutlass::arch::OpClassTensorOp;
-
     static constexpr int ElementsPerAccessA = 128 / cutlass::sizeof_bits<TypeA>::value;
-    static constexpr int ElementsPerAccessB = 8;
+    static constexpr int ElementsPerAccessB = 128 / cutlass::sizeof_bits<TypeB>::value;
     static constexpr int ElementsPerAccessC = 128 / cutlass::sizeof_bits<TypeC>::value;
+    using OperatorClass                     = cutlass::arch::OpClassTensorOp;
     using InstructionShape                  = cutlass::gemm::GemmShape<16, 8, 8>;
-
-    using Operator = cutlass::arch::OpMultiplyAdd;
 };
 
 // ======================= Ampere Traits ==============================
@@ -101,16 +82,11 @@ struct MixedGemmArchTraits<
                                           || cutlass::platform::is_same<TypeA, cutlass::bfloat16_t>::value>::type> {
 
 public:
-    static constexpr int ThreadblockK = 64;
-
-    using OperatorClass = cutlass::arch::OpClassTensorOp;
-
     static constexpr int ElementsPerAccessA = 128 / cutlass::sizeof_bits<TypeA>::value;
-    static constexpr int ElementsPerAccessB = 8;
+    static constexpr int ElementsPerAccessB = 128 / cutlass::sizeof_bits<TypeB>::value;
     static constexpr int ElementsPerAccessC = 128 / cutlass::sizeof_bits<TypeC>::value;
+    using OperatorClass                     = cutlass::arch::OpClassTensorOp;
     using InstructionShape                  = cutlass::gemm::GemmShape<16, 8, 16>;
-
-    using Operator = cutlass::arch::OpMultiplyAdd;
 };
 
 }  // namespace kernel

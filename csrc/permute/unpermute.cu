@@ -4,7 +4,6 @@
  * See LICENSE for license information.
  ************************************************************************/
 
-#include "extensions.h"
 #include "permute_kernels.h"
 
 using torch::Tensor;

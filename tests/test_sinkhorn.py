@@ -3,16 +3,15 @@
 # See LICENSE for license information.
 
 import unittest
-import itertools
 
 from absl.testing import parameterized
 
 try:
-  from grouped_gemm import sinkhorn_kernel
+  from grouped_gemm import sinkhorn
 except ImportError:
   print("grouped-gemm toolkit is not installed. Fall back to local import.")
   # For local debug
-  from ops import sinkhorn_kernel
+  from ..ops import sinkhorn
 
 import torch
 
@@ -63,7 +62,7 @@ class OpsTest(parameterized.TestCase):
         baseline_time = start.elapsed_time(end)
 
         start.record()
-        out = sinkhorn_kernel(cost, tol)
+        out = sinkhorn(cost, tol)
         end.record()
         torch.cuda.synchronize()
         kernel_time = start.elapsed_time(end)
@@ -72,5 +71,11 @@ class OpsTest(parameterized.TestCase):
         print("===================================")
         self.assertTrue(torch.allclose(out, expected_out))
 
+def test_sinkhorn():
+  loader = unittest.TestLoader()
+  suite = loader.loadTestsFromTestCase(OpsTest)
+  runner = unittest.TextTestRunner()
+  runner.run(suite)
+
 if __name__ == '__main__':
-    unittest.main()
+    test_sinkhorn()

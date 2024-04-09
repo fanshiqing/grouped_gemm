@@ -101,8 +101,6 @@ if(BUILD_CUTLASS_MOE)
   add_definitions("-DBUILD_CUTLASS_MOE")
 endif()
 
-# add_subdirectory(moe/cutlass_kernels)
-
 set(moe_files pybind.cu sinkhorn.cu)
 file(GLOB moe_files ${moe_files} permute/*.cu)
 file(GLOB moe_files ${moe_files} groupedgemm/*.cu)
@@ -110,7 +108,6 @@ file(GLOB moe_files ${moe_files} groupedgemm/*.cu)
 set(LIB_NAME "moe_unit_ops")
 add_library(${LIB_NAME} SHARED ${moe_files})
 set_target_properties(${LIB_NAME} PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
-# target_link_libraries(${LIB_NAME} "${TORCH_LIBRARIES}" moe_gemm_kernels)
 target_compile_features(${LIB_NAME} PRIVATE cxx_std_17)
 target_link_libraries(${LIB_NAME} "${TORCH_LIBRARIES}")
 

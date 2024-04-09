@@ -12,7 +12,7 @@ try:
 except ImportError:
   print("grouped-gemm toolkit is not installed. Fall back to local import.")
   # For local debug
-  from ops import permute, unpermute, groupedgemm, set_grouped_gemm_algo
+  from ..ops import permute, unpermute, groupedgemm, set_grouped_gemm_algo
 
 
 class TestMoeOps(unittest.TestCase):
@@ -296,7 +296,7 @@ class TestMoeOps(unittest.TestCase):
     PRINT =                        False
     BENCHMARK =                    False
 
-    set_grouped_gemm_algo(True)
+    set_grouped_gemm_algo(False)
 
     print()
     transB = False

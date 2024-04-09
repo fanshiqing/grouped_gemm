@@ -369,8 +369,8 @@ def groupedgemm(permuted_inputs, tokens_per_expert, *weights_list,
                               transB, gradient_accumulation_fusion,
                               *weights_list)
 
-def sinkhorn_kernel(cost, tol=0.0001):
+def sinkhorn(cost, tol=0.0001):
     return torch.ops.moe_unit_ops.sinkhorn(cost, tol)
 
-def set_grouped_gemm_algo(enable: bool):
-    torch.ops.moe_unit_ops.use_cublas_for_groupedgemm(enable)
+def set_grouped_gemm_algo(use_cublas_gemm: bool):
+    torch.ops.moe_unit_ops.use_cublas_for_groupedgemm(use_cublas_gemm)

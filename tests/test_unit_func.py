@@ -3,8 +3,6 @@
 # See LICENSE for license information.
 
 import torch
-import torch.nn.functional as F
-import numpy as np
 import unittest
 import sys
 import time
@@ -15,7 +13,7 @@ try:
 except ImportError:
   print("grouped-gemm toolkit is not installed. Fall back to local import.")
   # For local debug
-  torch.classes.load_library("./csrc/build/libmoe_unit_ops.so")
+  torch.classes.load_library("../csrc/build/libmoe_unit_ops.so")
 
 
 def random_cuda_tensor(shape, dtype, mean=0, std=1):

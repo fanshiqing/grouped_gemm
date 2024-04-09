@@ -4,8 +4,7 @@
  * See LICENSE for license information.
  ************************************************************************/
 
-#include "extensions.h"
-
+#include "cutlass_extensions/groupedgemm_varM_template.h"
 #include "cublas_wrapper.h"
 
 using torch::Tensor;
@@ -59,18 +58,18 @@ Tensor run_group_gemm_helper(Tensor              input_activations,
 
     if ((sm_ != 90) && (USE_CUBLAS == false))
     {
-        // groupedgemmformoe::MoeGemmRunner<T, WeightType> moe_gemm_runner_;
+        MoeGemmRunner<T, WeightType> moe_gemm_runner_;
 
-        // moe_gemm_runner_.moe_gemm(input_act_ptr,
-        //                           fc1_expert_weights_ptr_list,
-        //                           fc1_output_ptr,
-        //                           tokens_per_expert_ptr, // gemm_m
-        //                           gemm_n,                // gemm_n
-        //                           gemm_k,                // gemm_k
-        //                           gemm_m,                // num_tokens
-        //                           num_experts,
-        //                           transB,
-        //                           stream);
+        moe_gemm_runner_.moe_gemm(input_act_ptr,
+                                  fc1_expert_weights_ptr_list,
+                                  fc1_output_ptr,
+                                  tokens_per_expert_ptr, // gemm_m
+                                  gemm_n,                // gemm_n
+                                  gemm_k,                // gemm_k
+                                  gemm_m,                // num_tokens
+                                  num_experts,
+                                  transB,
+                                  stream);
     }
     else
     {

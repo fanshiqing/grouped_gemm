@@ -6,13 +6,48 @@
 
 #pragma once
 
-#include <cuda_runtime_api.h>
+#include "cutlass/gemm/device/gemm_grouped.h"
+#include "cutlass/gemm/kernel/default_gemm_grouped.h"
+#include "cutlass/util/device_memory.h"
 
-#include "moe/cutlass_kernels/th_utils.h"
-#include "ft_gemm_configs.h"
+#include "groupedgemm_traits.h"
+#include "groupedgemm_problem_desc.h"
 
+#include "extensions.h"
 
-namespace groupedgemmformoe {
+enum class CutlassTileConfig {
+    // Signals that we should run heuristics do choose a config
+    Undefined,
+
+    // Signals that we should run heuristics do choose a config
+    ChooseWithHeuristic,
+
+    // SiMT config
+    CtaShape128x128x8_WarpShape64x64x8,
+
+    // Warp configs for M=32
+    CtaShape32x128x64_WarpShape32x32x64,
+
+    // Warp configs for M=64
+    // CtaShape64x128x64_WarpShape32x64x64,
+    CtaShape64x128x64_WarpShape64x32x64,
+
+    // Warp configs for M=128
+    CtaShape128x128x64_WarpShape64x32x64,
+    CtaShape128x128x64_WarpShape128x32x64,
+
+    // CUTLASS Grouped GEMM config
+    CtaShape64x128x64_WarpShape32x64x64,
+    CtaShape128x64x64_WarpShape64x32x64,
+    CtaShape128x128x32_WarpShape64x64x32,
+    CtaShape128x64x32_WarpShape64x32x32,
+    CtaShape64x128x32_WarpShape32x64x32
+};
+
+struct CutlassGemmConfig {
+    CutlassTileConfig tile_config    = CutlassTileConfig::ChooseWithHeuristic;
+    int               stages         = -1;
+};
 
 template<typename T,         /* Data Type of Input and Output Activations */
          typename WeightType /* Weight Data Type */>
@@ -21,9 +56,9 @@ public:
     MoeGemmRunner()
     {
         int device{-1};
-        check_cuda_error(cudaGetDevice(&device));
+        cudaGetDevice(&device);
         sm_ = getSMVersion();
-        check_cuda_error(cudaDeviceGetAttribute(&multi_processor_count_, cudaDevAttrMultiProcessorCount, device));
+        cudaDeviceGetAttribute(&multi_processor_count_, cudaDevAttrMultiProcessorCount, device);
     }
 
     void moe_gemm(T*           A,
@@ -105,5 +140,3 @@ private:
     int sm_;
     int multi_processor_count_;
 };
-
-}  // namespace groupedgemmformoe

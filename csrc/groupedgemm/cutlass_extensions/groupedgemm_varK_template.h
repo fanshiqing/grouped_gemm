@@ -6,20 +6,7 @@
 
 #pragma once
 
-#include "cutlass/gemm/device/gemm_grouped.h"
-#include "cutlass/gemm/kernel/default_gemm_grouped.h"
-#include "cutlass/util/device_memory.h"
-
-#include "default_fpA_intB_traits.h"
-#include "compute_occupancy.h"
-
-#include "moe/cutlass_kernels/cutlass_heuristic.h"
-#include "moe/cutlass_kernels/moe_gemm/moe_gemm_kernels.h"
-#include "moe/cutlass_kernels/moe_gemm/grouped_gemm_problem_desc.h"
-
-#include <nvtx3/nvToolsExt.h>
-
-namespace groupedgemmformoe {
+#include "groupedgemm_kernels.h"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -83,11 +70,6 @@ void generic_moe_gemm_backward_kernelLauncher(
       Stages>::GemmKernel;
 
     using GemmGrouped = cutlass::gemm::device::GemmGrouped<GemmKernel>;
-
-    if (kernel_occupancy != nullptr) {
-        *kernel_occupancy = compute_occupancy_for_kernel<GemmKernel>();
-        return;
-    }
 
     GroupedGemmProblemDesc<ElementA, ElementB, ElementC> problem_desc(num_experts);
 
@@ -712,5 +694,4 @@ void MoeGemmRunner<T, WeightType>::moe_gemm_backward(T*              A,
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
-} // namespace groupedgemmformoe
 

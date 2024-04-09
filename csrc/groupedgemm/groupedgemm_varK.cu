@@ -4,12 +4,10 @@
  * See LICENSE for license information.
  ************************************************************************/
 
-#include "extensions.h"
-
+#include "cutlass_extensions/groupedgemm_varK_template.h"
 #include "cublas_wrapper.h"
 
 using torch::Tensor;
-
 
 template <typename T,
           typename WeightType,
@@ -30,20 +28,20 @@ void group_gemm_varK_algo_dispatcher(T*              A,
 
     if ((sm_ != 90) && (USE_CUBLAS == false))
     {
-        // groupedgemmformoe::MoeGemmRunner<T, WeightType> moe_gemm_runner_;
+        MoeGemmRunner<T, WeightType> moe_gemm_runner_;
 
-        // moe_gemm_runner_.template moe_gemm_backward<AccumGradType>(
-        //     A,
-        //     B,
-        //     C,
-        //     weight_grad_list,
-        //     gemm_m,
-        //     gemm_n,
-        //     gemm_k_per_expert,
-        //     num_tokens,
-        //     num_experts,
-        //     transC,
-        //     stream);
+        moe_gemm_runner_.moe_gemm_backward(
+            A,
+            B,
+            C,
+            weight_grad_list,
+            gemm_m,
+            gemm_n,
+            gemm_k_per_expert,
+            num_tokens,
+            num_experts,
+            transC,
+            stream);
     }
     else
     {

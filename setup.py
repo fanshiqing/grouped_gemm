@@ -69,8 +69,8 @@ setup_requires = []
 if not found_cmake():
     setup_requires.append("cmake>=3.18")
 
-build_dir = os.path.dirname(os.path.abspath(__file__)) + '/grouped_gemm_dev/build'
-cmake_dir = os.path.dirname(os.path.abspath(__file__)) + '/grouped_gemm_dev'
+build_dir = os.path.dirname(os.path.abspath(__file__)) + '/csrc/build'
+cmake_dir = os.path.dirname(os.path.abspath(__file__)) + '/csrc'
 
 if not os.path.exists(build_dir):
     os.makedirs(build_dir)
@@ -95,11 +95,12 @@ setup(
         "License :: OSI Approved :: BSD License",
         "Operating System :: Unix",
     ],
-    package_dir={'grouped_gemm': 'grouped_gemm_dev'},
-    packages=['grouped_gemm', 'grouped_gemm.moe'],
+    package_dir={'grouped_gemm': './'},
+    packages=['grouped_gemm', 'grouped_gemm.tests'],
     package_data={
-    'grouped_gemm': ['build/libmoe_unit_ops.so'],
+    'grouped_gemm': ['csrc/build/libmoe_unit_ops.so'],
     },
     cmdclass={"build_ext": BuildExtension},
     install_requires=["absl-py", "numpy", "torch"],
+    license_files=("LICENSE",),
 )

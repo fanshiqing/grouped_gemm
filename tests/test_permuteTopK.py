@@ -11,7 +11,7 @@ try:
 except ImportError:
   print("grouped-gemm toolkit is not installed. Fall back to local import.")
   # For local debug
-  from ops import permute as permute_topK, unpermute as unpermute_topK
+  from ..ops import permute as permute_topK, unpermute as unpermute_topK
 
 def permute(tokens, indices, expand_factor: int = 1, is_fp8=False):
     """Permute the tokens based on the indices.
@@ -299,14 +299,9 @@ def perf_test_cuda_kernel(cuda_kernel_fn):
     else:
         print("CUDA is not available.")
 
-if __name__ == "__main__":
+def test_permute_topK():
 
     torch.manual_seed(1)
-
-    # num_token = 4
-    # num_expert = 3
-    # hidden_size = 8
-    # num_topK = 2
 
     num_token = 4096 * 2
     num_expert = 8
@@ -339,3 +334,6 @@ if __name__ == "__main__":
     permute_topK_test(dtype, num_token, 8, hidden_size, 5, False, Benchmark)
     num_token = 0
     permute_topK_test(dtype, num_token, 8, hidden_size, 5, False, Benchmark)
+
+if __name__ == "__main__":
+    test_permute_topK()
