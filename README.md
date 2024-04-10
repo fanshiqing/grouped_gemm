@@ -16,6 +16,7 @@ Grouped GEMM for MoE
   - [permute](#permute)
   - [unpermute](#unpermute)
   - [groupedgemm](#groupedgemm)
+- [Unit Tests](#unit-tests)
 
 ---
 
@@ -72,7 +73,7 @@ python test_permuteTopK.py
 ## permute
 
 > ```py
-> moe.ops.permute(
+> grouped_gemm.ops.permute(
 >   input_act: torch.Tensor,
 >   indices: torch.Tensor,
 >   max_token_num=0: int) -> tuple
@@ -81,7 +82,7 @@ python test_permuteTopK.py
 The output tuple of `(torch.Tensor, torch.Tensor)` that contains two tensors `permuted_act` and `row_id_map`.
 
 * `permuted_act` is the permutation of the original tensor `input_act` with its first dimension permuted according to `indices`.
-* `row_id_map` is the mapping table for the row indices of the input activations before and after `moe.ops.permute`, which is used for the following `unpermute` op.
+* `row_id_map` is the mapping table for the row indices of the input activations before and after `grouped_gemm.ops.permute`, which is used for the following `unpermute` op.
 
 ### Parameters
 
@@ -101,23 +102,23 @@ The output tuple of `(torch.Tensor, torch.Tensor)` that contains two tensors `pe
 ## unpermute
 
 > ```py
-> moe.ops.unpermute(
+> grouped_gemm.ops.unpermute(
 >   input_act: torch.Tensor,
 >   row_id_map: torch.Tensor,
 >   probs) -> torch.Tensor
 > ```
 
-The mirror operator of `moe.ops.permute`.
+The mirror operator of `grouped_gemm.ops.permute`.
 
 ### Parameters
 
 * **input_act** (torch.Tensor)  
     &emsp;shape = [tokens_num * topK_num, hidden_size]  
-    &emsp;The permuted activations produced by `moe.ops.permute`.
+    &emsp;The permuted activations produced by `grouped_gemm.ops.permute`.
 
 * **row_id_map** (torch.Tensor)  
     &emsp;shape = [tokens_num * topK_num]  
-    &emsp;The mapping table for the row indices of the activations before and after `moe.ops.permute`. The second output tensor of `moe.ops.permute`.
+    &emsp;The mapping table for the row indices of the activations before and after `grouped_gemm.ops.permute`. The second output tensor of `grouped_gemm.ops.permute`.
 
 * **probs** (torch.Tensor)  
     &emsp;shape = [tokens_num, topK_num]  
@@ -164,7 +165,7 @@ print(unpermute_outputs)
 
 ## groupedgemm
 > ```py
-> moe.ops.groupedgemm(
+> grouped_gemm.ops.groupedgemm(
 >   permuted_inputs: torch.Tensor,
 >   tokens_per_expert: torch.Tensor,
 >   weights_list: list,
@@ -179,7 +180,7 @@ Grouped matrix product of two tensors activations and weights for each expert.
 
 * **permuted_inputs** (torch.Tensor)  
     &emsp;shape = [tokens_num, hidden_size]  
-    &emsp;The permuted input activations with each row sorted according to expert id via `moe.ops.permute`.
+    &emsp;The permuted input activations with each row sorted according to expert id via `grouped_gemm.ops.permute`.
 
 * **tokens_per_expert** (torch.Tensor)  
     &emsp;shape = [num_experts]  
@@ -197,3 +198,14 @@ Grouped matrix product of two tensors activations and weights for each expert.
     &emsp;Whether to do gradient accumulation. If this is set, we are assuming that each input weight tensor in `weights_list` has a `main_grad` field.
 
 <p align="center"><img src=figures/figure_groupedgemm.png></p>
+
+# Unit Tests
+
+```py
+from grouped_gemm import tests
+
+tests.test_func()
+tests.test_ops()
+tests.test_permute_topK()
+tests.test_sinkhorn()
+```
