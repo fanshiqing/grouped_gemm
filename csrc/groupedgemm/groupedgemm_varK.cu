@@ -24,9 +24,10 @@ void group_gemm_varK_algo_dispatcher(T*              A,
                                      bool            transC,
                                      cudaStream_t    stream)
 {
-    int sm_ = getSMVersion();
+    // int sm_ = getSMVersion();
 
-    if ((sm_ != 90) && (USE_CUBLAS == false))
+    // if ((sm_ != 90) && (USE_CUBLAS == false))
+    if (USE_CUBLAS == false)
     {
         MoeGemmRunner<T, WeightType> moe_gemm_runner_;
 

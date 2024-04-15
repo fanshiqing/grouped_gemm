@@ -54,9 +54,10 @@ Tensor run_group_gemm_helper(Tensor              input_activations,
         torch::empty({gemm_m, gemm_n}, torch::dtype(_st).device(torch::kCUDA).requires_grad(false));
     T *fc1_output_ptr = get_ptr<T>(fc1_output);
 
-    int sm_ = getSMVersion();
+    // int sm_ = getSMVersion();
 
-    if ((sm_ != 90) && (USE_CUBLAS == false))
+    // if ((sm_ != 90) && (USE_CUBLAS == false))
+    if (USE_CUBLAS == false)
     {
         MoeGemmRunner<T, WeightType> moe_gemm_runner_;
 
