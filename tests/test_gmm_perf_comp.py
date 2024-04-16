@@ -1,20 +1,26 @@
 
 import torch
 import triton
+import torch.cuda.nvtx as nvtx
 # pip install git+https://github.com/tgale96/grouped_gemm@main
 from grouped_gemm.ops import gmm
 
 import sys
 sys.path.append("..")
-from ops import permute, unpermute, groupedgemm, set_grouped_gemm_algo
+from ops import groupedgemm, set_grouped_gemm_algo
 
 
 
 dtype = torch.bfloat16
-token_num = 4096 * 2
-expert_num = 8
-n = 14336
+token_num = 4096 * 6
+expert_num = 64
+n = 1408
 k = 4096
+# token_num = 4096 * 2
+# expert_num = 8
+# n = 14336
+# k = 4096
+
 batch_sizes = (torch.ones([expert_num]) * (token_num // expert_num)).to(torch.int64)
 BENCHMARK = True
 warmups = 100
@@ -24,6 +30,11 @@ for i in range(a.size(0)):
     a[i] = i
 b = torch.ones((expert_num, k, n), dtype=dtype).cuda()
 
+
+def bwd_wrapper(cuda_kernel_fn, none_grad_list):
+    for i in none_grad_list:
+        i.grad = None
+    cuda_kernel_fn()
 
 ################################################################################################
 ##
@@ -41,7 +52,7 @@ for i in range(batch_sizes.size(0)):
     weights_list.append(nv_b[i].detach())
     weights_list[i].requires_grad_(True)
 
-batch_sizes_nv = batch_sizes.cuda().to(torch.int32)
+batch_sizes_nv = batch_sizes.to(torch.int32)
 
 # grouped gemm
 nv_c = groupedgemm(nv_a,
@@ -62,15 +73,33 @@ if BENCHMARK:
                     gradient_accumulation_fusion=False)
     
     print(f"-------- Benchmark --------")
+    nvtx.range_push("nv cublas forward")
     t = triton.testing.do_bench(lambda: groupedgemm(nv_a,   \
                                                     batch_sizes_nv, \
                                                     *weights_list,     \
                                                     transB=False,     \
                                                     gradient_accumulation_fusion=False))
-    print(f"nv gemm fwd: {t:.3f} ms")
+    nvtx.range_pop()
+    print(f"nv cublas fwd: {t:.3f} ms")
+
+    set_grouped_gemm_algo(False)
+
+    nvtx.range_push("nv cutlass forward")
+    t = triton.testing.do_bench(lambda: groupedgemm(nv_a,   \
+                                                    batch_sizes_nv, \
+                                                    *weights_list,     \
+                                                    transB=False,     \
+                                                    gradient_accumulation_fusion=False))
+    nvtx.range_pop()
+    print(f"nv cutlass fwd: {t:.3f} ms")
+
+    set_grouped_gemm_algo(True)
 
     bwd_input = torch.rand_like(nv_c)
+
+    nvtx.range_push("nv backward")
     t = triton.testing.do_bench(lambda: nv_c.backward(bwd_input, retain_graph=True))
+    nvtx.range_pop()
     print(f"nv gemm bwd: {t:.3f} ms")
 
 
@@ -95,12 +124,18 @@ if BENCHMARK:
         gmm(mega_a, mega_b, batch_sizes, trans_b=False)
 
     print(f"-------- Benchmark --------")
+    nvtx.range_push("megablocks forward")
     t = triton.testing.do_bench(
         lambda: gmm(mega_a, mega_b, batch_sizes, trans_b=False))
+    nvtx.range_pop()
     print(f"megablocks fwd: {t:.3f} ms")
 
     bwd_input = torch.rand_like(mega_c)
-    t = triton.testing.do_bench(lambda: mega_c.backward(bwd_input, retain_graph=True))
+    nvtx.range_push("megablocks backward")
+    t = triton.testing.do_bench(
+        lambda: bwd_wrapper(lambda: mega_c.backward(bwd_input, retain_graph=True), [mega_a, mega_b])
+    )
+    nvtx.range_pop()
     print(f"megablocks bwd: {t:.3f} ms")
 
 
@@ -151,9 +186,19 @@ if BENCHMARK:
         pytorch_gmm(a_list, b_list, batch_sizes)
 
     print(f"-------- Benchmark --------")
+    nvtx.range_push("pytorch forward")
     t = triton.testing.do_bench(
         lambda: pytorch_gmm(a_list, b_list, batch_sizes))
+    nvtx.range_pop()
     print(f"pytorch fwd: {t:.3f} ms")
 
-    t = triton.testing.do_bench(lambda: pytorch_gmm_bwd(c_list, bwd_input_list))
+    pytorch_list = []
+    pytorch_list.extend(a_list)
+    pytorch_list.extend(b_list)
+
+    nvtx.range_push("pytorch backward")
+    t = triton.testing.do_bench(
+        lambda: bwd_wrapper(lambda: pytorch_gmm_bwd(c_list, bwd_input_list), pytorch_list)
+    )
+    nvtx.range_pop()
     print(f"pytorch bwd: {t:.3f} ms")
