@@ -221,7 +221,7 @@ class TestMoe(unittest.TestCase):
 
     rows_per_expert = torch.bincount(inputs["expert_for_rows"], minlength=num_experts)
     # Cast from int64 to int32 to meet the kernel's requirement.
-    rows_per_expert = rows_per_expert.to(torch.int32)
+    rows_per_expert = rows_per_expert.to(torch.int32).cpu()
 
     weights_list = []
     for i in range(num_experts):
@@ -333,7 +333,7 @@ class TestMoe(unittest.TestCase):
 
     rows_per_expert = torch.bincount(inputs["expert_for_rows"], minlength=num_experts)
     # Cast from int64 to int32 to meet the kernel's requirement.
-    rows_per_expert = rows_per_expert.to(torch.int32)
+    rows_per_expert = rows_per_expert.to(torch.int32).cpu()
 
     nvtx.range_push("backward cutlass grouped gemm")
     # Grouped GEMM for the case of fixed M, N and variable K

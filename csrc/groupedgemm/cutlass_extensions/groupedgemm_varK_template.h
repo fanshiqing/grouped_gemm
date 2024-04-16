@@ -71,55 +71,29 @@ void generic_moe_gemm_backward_kernelLauncher(
 
     using GemmGrouped = cutlass::gemm::device::GemmGrouped<GemmKernel>;
 
-    GroupedGemmProblemDesc<ElementA, ElementB, ElementC> problem_desc(num_experts);
+    GroupedGemmProblemDesc<ElementA, ElementB, ElementC> problem_desc(num_experts, true, stream);
 
-    ElementAccumulator beta;
+    setGroupedGemmProblemDescFromHost<ElementA,
+                                      ElementB,
+                                      ElementC,
+                                      LayoutA,
+                                      LayoutB,
+                                      LayoutC>(problem_desc, num_experts,
+                                               gemm_m, gemm_n, gemm_k_per_expert,
+                                               A, B, C, weight_grad_list, stream);
 
-    if (C != nullptr)
-    {
-        setGroupedGemmProblemDescFromDevice<ElementA,
-                                            ElementB,
-                                            ElementC,
-                                            LayoutA,
-                                            LayoutB,
-                                            LayoutC>(problem_desc, num_experts,
-                                                     gemm_m, gemm_n, gemm_k_per_expert,
-                                                     A, B, C, true, stream);
-        beta = 0.f;
-    }
-    else
-    {
-        cudaMemcpyAsync(problem_desc.device_ptr_C, weight_grad_list,
-                        num_experts * sizeof(ElementC *),
-                        cudaMemcpyHostToDevice, stream);
-        setGroupedGemmProblemDescFromDevice<ElementA,
-                                            ElementB,
-                                            ElementC,
-                                            LayoutA,
-                                            LayoutB,
-                                            LayoutC>(problem_desc, num_experts,
-                                                     gemm_m, gemm_n, gemm_k_per_expert,
-                                                     A, B, C, false, stream);
-        beta = 1.f;
-    }
-
-    std::vector<cutlass::gemm::GemmCoord> host_problem_sizes(num_experts);
-    cudaMemcpyAsync(host_problem_sizes.data(), problem_desc.problem_sizes, 
-                    num_experts * sizeof(cutlass::gemm::GemmCoord),
-                    cudaMemcpyDeviceToHost,
-                    stream);
-
-    int threadblock_count = GemmGrouped::sufficient(host_problem_sizes.data(), num_experts);
+    int threadblock_count = GemmGrouped::sufficient(problem_desc.host_problem_sizes, num_experts);
     if (!threadblock_count)
     {
         throw std::runtime_error(
             "[FT Error][MoE Runner] GPU lacks resources to run GroupedGEMM kernel.");
     }
 
+    ElementAccumulator beta = (C != nullptr) ? 0.0f : 1.0f;
     typename EpilogueOp::Params epilogue_op(ElementAccumulator(1.f), beta);
 
     typename GemmGrouped::Arguments args(
-        problem_desc.problem_sizes,
+        problem_desc.device_problem_sizes,
         num_experts,
         threadblock_count,
         epilogue_op,
@@ -131,7 +105,7 @@ void generic_moe_gemm_backward_kernelLauncher(
         problem_desc.device_ldb,
         problem_desc.device_ldc,
         problem_desc.device_ldc,
-        host_problem_sizes.data());
+        problem_desc.host_problem_sizes);
 
     GemmGrouped gemm;
     auto can_implement = gemm.can_implement(args);

@@ -129,7 +129,7 @@ class TestMoeOps(unittest.TestCase):
 
     expert_for_rows = torch.randint(size=(num_rows,),low=0,high=num_experts, dtype=torch.int32).cuda()
     tokens_per_expert = torch.bincount(expert_for_rows, minlength=num_experts)
-    tokens_per_expert = tokens_per_expert.to(torch.int32)
+    tokens_per_expert = tokens_per_expert.to(torch.int32).cpu()
 
     permuted_inputs = torch.empty([num_rows, hidden_size], dtype=dtype, device="cuda").normal_(rand_mean, rand_std)
     permuted_inputs.requires_grad_(True)
@@ -176,7 +176,7 @@ class TestMoeOps(unittest.TestCase):
     activation_grad_ref_list = []
 
     rows_idx_for_expert = torch.cumsum(tokens_per_expert, dim=0)
-    rows_idx_for_expert = torch.cat((torch.tensor([0]).cuda(), rows_idx_for_expert[:-1]))
+    rows_idx_for_expert = torch.cat((torch.tensor([0]), rows_idx_for_expert[:-1]))
 
     for expert_id in range(num_experts):
       row_start_id = rows_idx_for_expert[expert_id]

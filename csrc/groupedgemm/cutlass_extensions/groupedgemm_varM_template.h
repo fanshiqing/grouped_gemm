@@ -101,27 +101,17 @@ void generic_moe_gemm_kernelLauncher(
     ElementB **ptr_B_list = reinterpret_cast<ElementB **>(B_list);
     ElementC *ptr_C = reinterpret_cast<ElementC *>(C);
 
-    GroupedGemmProblemDesc<ElementA, ElementB, ElementC> problem_desc(num_experts);
-    cudaMemcpyAsync(problem_desc.device_ptr_B, ptr_B_list, 
-                    num_experts * sizeof(ElementB *),
-                    cudaMemcpyHostToDevice,
-                    stream);
-    setGroupedGemmProblemDescFromDevice<ElementA,
-                                        ElementB,
-                                        ElementC,
-                                        LayoutA,
-                                        LayoutB,
-                                        LayoutC>(problem_desc, num_experts,
-                                                 gemm_m_per_expert, gemm_n, gemm_k,
-                                                 ptr_A, ptr_C, stream);
+    GroupedGemmProblemDesc<ElementA, ElementB, ElementC> problem_desc(num_experts, true, stream);
+    setGroupedGemmProblemDescFromHost<ElementA,
+                                      ElementB,
+                                      ElementC,
+                                      LayoutA,
+                                      LayoutB,
+                                      LayoutC>(problem_desc, num_experts,
+                                               gemm_m_per_expert, gemm_n, gemm_k,
+                                               ptr_A, ptr_B_list, ptr_C, stream);
 
-    std::vector<cutlass::gemm::GemmCoord> host_problem_sizes(num_experts);
-    cudaMemcpyAsync(host_problem_sizes.data(), problem_desc.problem_sizes, 
-                    num_experts * sizeof(cutlass::gemm::GemmCoord),
-                    cudaMemcpyDeviceToHost,
-                    stream);
-
-    int threadblock_count = GemmGrouped::sufficient(host_problem_sizes.data(), num_experts);
+    int threadblock_count = GemmGrouped::sufficient(problem_desc.host_problem_sizes, num_experts);
     if (!threadblock_count)
     {
         throw std::runtime_error(
@@ -131,7 +121,7 @@ void generic_moe_gemm_kernelLauncher(
     typename EpilogueOp::Params epilogue_op(ElementAccumulator(1.f), ElementAccumulator(0.f));
 
     typename GemmGrouped::Arguments args(
-        problem_desc.problem_sizes,
+        problem_desc.device_problem_sizes,
         num_experts,
         threadblock_count,
         epilogue_op,
@@ -143,7 +133,7 @@ void generic_moe_gemm_kernelLauncher(
         problem_desc.device_ldb,
         problem_desc.device_ldc,
         problem_desc.device_ldc,
-        host_problem_sizes.data());
+        problem_desc.host_problem_sizes);
 
     GemmGrouped gemm;
     auto can_implement = gemm.can_implement(args);

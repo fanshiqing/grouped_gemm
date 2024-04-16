@@ -74,12 +74,6 @@ void cublas_group_gemm_helper(
 
     int ldb = transB ? gemm_k : gemm_n;
 
-    int gemm_m[num_experts];
-
-    cudaMemcpy(gemm_m, gemm_m_per_expert,
-               num_experts * sizeof(int),
-               cudaMemcpyDeviceToHost);
-
     for (int e = 0; e < num_experts; e++)
     {
         int i = e % NUM_STREAM;
@@ -89,7 +83,7 @@ void cublas_group_gemm_helper(
             trans_B,
             trans_A,
             gemm_n,
-            gemm_m[e],
+            gemm_m_per_expert[e],
             gemm_k,
             &alpha,
             B_list[e],
@@ -105,8 +99,8 @@ void cublas_group_gemm_helper(
             computeType,
             cublas_algo);
 
-        A = A + gemm_m[e] * gemm_k;
-        C = C + gemm_m[e] * gemm_n;
+        A = A + gemm_m_per_expert[e] * gemm_k;
+        C = C + gemm_m_per_expert[e] * gemm_n;
     }
 }
 
@@ -179,12 +173,6 @@ void cublas_group_gemm_helper(
     cublasGemmAlgo_t cublas_algo = CUBLAS_GEMM_DEFAULT;
     float alpha = 1.0f;
 
-    int gemm_k[num_experts];
-
-    cudaMemcpy(gemm_k, gemm_k_per_expert,
-               num_experts * sizeof(int),
-               cudaMemcpyDeviceToHost);
-
     if (!transC)
     {
         for (int e = 0; e < num_experts; e++)
@@ -211,7 +199,7 @@ void cublas_group_gemm_helper(
                 trans_A,
                 gemm_n,
                 gemm_m,
-                gemm_k[e],
+                gemm_k_per_expert[e],
                 &alpha,
                 B,
                 Btype,
@@ -226,8 +214,8 @@ void cublas_group_gemm_helper(
                 computeType,
                 cublas_algo);
 
-            A = A + gemm_m * gemm_k[e];
-            B = B + gemm_n * gemm_k[e];
+            A = A + gemm_m * gemm_k_per_expert[e];
+            B = B + gemm_n * gemm_k_per_expert[e];
         }
     }
     else
@@ -256,7 +244,7 @@ void cublas_group_gemm_helper(
                 trans_B,
                 gemm_m,
                 gemm_n,
-                gemm_k[e],
+                gemm_k_per_expert[e],
                 &alpha,
                 A,
                 Atype,
@@ -271,8 +259,8 @@ void cublas_group_gemm_helper(
                 computeType,
                 cublas_algo);
 
-            A = A + gemm_m * gemm_k[e];
-            B = B + gemm_n * gemm_k[e];
+            A = A + gemm_m * gemm_k_per_expert[e];
+            B = B + gemm_n * gemm_k_per_expert[e];
         }
     }
 }

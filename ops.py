@@ -240,9 +240,9 @@ class GroupedGemmMoE(torch.autograd.Function):
       raise RuntimeError("[Error] The input `permuted_inputs` of groupedgemm op is on the device: CPU!")
     if weights_list[0].is_cpu:
       raise RuntimeError("[Error] The input `weights_list` of groupedgemm op is on the device: CPU!")
-    if tokens_per_expert.is_cpu:
-      print("[Warning] The input `tokens_per_expert` of groupedgemm op is on the device: CPU!", file=stderr)
-      tokens_per_expert = tokens_per_expert.cuda()
+    if not tokens_per_expert.is_cpu:
+      print("[Warning] The input `tokens_per_expert` of groupedgemm op should be on the device: CPU!", file=stderr)
+      tokens_per_expert = tokens_per_expert.cpu()
 
     # Shape check
     if not transB:
@@ -311,6 +311,10 @@ class GroupedGemmMoE(torch.autograd.Function):
 
     if not permuted_inputs_grad.is_contiguous():
       permuted_inputs_grad = permuted_inputs_grad.contiguous()
+
+    for weight in weights_list:
+      weight.grad = None
+    permuted_inputs.grad = None
 
     activation_grad = None
     if ctx.needs_input_grad[0]:
