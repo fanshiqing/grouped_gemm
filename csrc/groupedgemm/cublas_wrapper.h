@@ -12,6 +12,7 @@ extern bool USE_CUBLAS;
 extern bool cublas_init;
 extern cublasHandle_t cublas_handle[NUM_STREAM];
 extern cudaStream_t cublas_stream[NUM_STREAM];
+extern cudaEvent_t cublas_event[NUM_STREAM];
 
 inline void cublas_handle_init()
 {
@@ -22,6 +23,20 @@ inline void cublas_handle_init()
         cudaStreamCreate(&cublas_stream[i]);
         cublasCreate(&cublas_handle[i]);
         cublasSetStream(cublas_handle[i], cublas_stream[i]);
+        cudaEventCreate(&cublas_event[i]);
+    }
+}
+
+inline void cublas_sync_streams(cudaStream_t stream)
+{
+    for (int s = 0; s < NUM_STREAM; s++)
+    {
+        cudaEventRecord(cublas_event[s], cublas_stream[s]);
+    }
+
+    for (int s = 0; s < NUM_STREAM; s++)
+    {
+        cudaStreamWaitEvent(stream, cublas_event[s]);
     }
 }
 
@@ -38,6 +53,9 @@ void cublas_group_gemm_helper(
     cudaStream_t stream)
 {
     // variable M grouped gemm
+
+    if (!cublas_init)
+        cublas_handle_init();
 
     cudaDataType_t Atype;
     cudaDataType_t Btype;
@@ -102,6 +120,8 @@ void cublas_group_gemm_helper(
         A = A + gemm_m_per_expert[e] * gemm_k;
         C = C + gemm_m_per_expert[e] * gemm_n;
     }
+
+    cublas_sync_streams(stream);
 }
 
 template <typename T,
@@ -119,6 +139,9 @@ void cublas_group_gemm_helper(
     cudaStream_t stream)
 {
     // variable K grouped gemm
+
+    if (!cublas_init)
+        cublas_handle_init();
 
     cudaDataType_t Atype;
     cudaDataType_t Btype;
@@ -263,4 +286,6 @@ void cublas_group_gemm_helper(
             B = B + gemm_n * gemm_k_per_expert[e];
         }
     }
+
+    cublas_sync_streams(stream);
 }

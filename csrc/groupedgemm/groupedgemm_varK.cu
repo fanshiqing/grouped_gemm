@@ -46,9 +46,6 @@ void group_gemm_varK_algo_dispatcher(T*              A,
     }
     else
     {
-        if (!cublas_init)
-            cublas_handle_init();
-
         cublas_group_gemm_helper<T, AccumGradType>(
             A,
             B,

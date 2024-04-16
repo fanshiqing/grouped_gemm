@@ -13,6 +13,7 @@ bool USE_CUBLAS = true;
 bool cublas_init = false;
 cublasHandle_t cublas_handle[NUM_STREAM];
 cudaStream_t cublas_stream[NUM_STREAM];
+cudaEvent_t cublas_event[NUM_STREAM];
 
 void use_cublas_for_groupedgemm(bool enable)
 {
@@ -74,9 +75,6 @@ Tensor run_group_gemm_helper(Tensor              input_activations,
     }
     else
     {
-        if (!cublas_init)
-            cublas_handle_init();
-
         cublas_group_gemm_helper<T>(
             input_act_ptr,
             fc1_expert_weights_ptr_list,
