@@ -47,6 +47,7 @@ Tensor moe_recover_topK_op(
             num_tokens,
             num_topK,
             num_cols,
+            0,
             stream);
 
         break;
@@ -68,6 +69,7 @@ Tensor moe_recover_topK_op(
             num_tokens,
             num_topK,
             num_cols,
+            0,
             stream);
 
         break;
@@ -90,6 +92,7 @@ Tensor moe_recover_topK_op(
             num_tokens,
             num_topK,
             num_cols,
+            0,
             stream);
 
         break;
@@ -113,6 +116,7 @@ Tensor moe_recover_topK_op(
             num_tokens,
             num_topK,
             num_cols,
+            0,
             stream);
 
         break;
@@ -134,6 +138,7 @@ Tensor moe_recover_topK_op(
             num_tokens,
             num_topK,
             num_cols,
+            0,
             stream);
 
         break;
@@ -164,7 +169,7 @@ std::tuple<Tensor, Tensor> moe_recover_topK_bwd_op(
 
     // Output buffer alloc
     Tensor act_grad =
-        torch::empty({num_tokens * num_topK, num_cols}, torch::dtype(_st).device(torch::kCUDA).requires_grad(false));
+        torch::empty({input_fwd.size(0), num_cols}, torch::dtype(_st).device(torch::kCUDA).requires_grad(false));
     Tensor prob_grad =
         torch::empty({num_tokens, num_topK}, torch::dtype(torch::kFloat32).device(torch::kCUDA).requires_grad(false));
     float *prob_grad_ptr = get_ptr<float>(prob_grad);
@@ -191,6 +196,7 @@ std::tuple<Tensor, Tensor> moe_recover_topK_bwd_op(
             num_tokens,
             num_topK,
             num_cols,
+            0,
             stream,
             prob_grad_ptr,
             input_fwd_ptr);
@@ -215,6 +221,7 @@ std::tuple<Tensor, Tensor> moe_recover_topK_bwd_op(
             num_tokens,
             num_topK,
             num_cols,
+            0,
             stream,
             prob_grad_ptr,
             input_fwd_ptr);
@@ -240,6 +247,7 @@ std::tuple<Tensor, Tensor> moe_recover_topK_bwd_op(
             num_tokens,
             num_topK,
             num_cols,
+            0,
             stream,
             prob_grad_ptr,
             input_fwd_ptr);
@@ -266,6 +274,7 @@ std::tuple<Tensor, Tensor> moe_recover_topK_bwd_op(
             num_tokens,
             num_topK,
             num_cols,
+            0,
             stream,
             prob_grad_ptr,
             input_fwd_ptr);
@@ -290,6 +299,7 @@ std::tuple<Tensor, Tensor> moe_recover_topK_bwd_op(
             num_tokens,
             num_topK,
             num_cols,
+            0,
             stream,
             prob_grad_ptr,
             input_fwd_ptr);

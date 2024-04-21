@@ -18,7 +18,8 @@ static __global__ void moe_permute_topK_row_map(
     const int *sorted_row_id,
     int *row_id_map,
     const int num_rows,
-    const int num_topK)
+    const int num_topK,
+    const int num_out_tokens)
 {
     // Each block corresponds to one source token
     // row_id_map[num_topK][num_rows]
@@ -33,7 +34,14 @@ static __global__ void moe_permute_topK_row_map(
     int source_token_id = source_row / num_topK;
     int source_topK_id = source_row % num_topK;
 
-    row_id_map[source_topK_id * num_rows + source_token_id] = idx;
+    if (idx >= num_out_tokens)
+    {
+        row_id_map[source_topK_id * num_rows + source_token_id] = -1;
+    }
+    else
+    {
+        row_id_map[source_topK_id * num_rows + source_token_id] = idx;
+    }
 }
 
 template <typename T, typename TCompute, int kElementsPerAccess, bool hasProb>
@@ -74,21 +82,33 @@ __global__ void moe_recover_topK_kernel(const T *input,
         FragmentCompute frag_sum;
         
         int source_row = row_id_map[source_token];
-        const T *source_row_ptr = input + source_row * num_cols;
 
-        cutlass::arch::global_load<FragmentLoadStore, sizeof(FragmentLoadStore), cutlass::arch::CacheOperation::LastUse>(
-            frag_load_store, (source_row_ptr + i), true);
-        frag_sum = src_converter(frag_load_store);
-
-        if (hasProb)
+        if (source_row != -1)
         {
-            frag_sum = frag_sum * s_prob[0];
+            const T *source_row_ptr = input + source_row * num_cols;
+
+            cutlass::arch::global_load<FragmentLoadStore, sizeof(FragmentLoadStore), cutlass::arch::CacheOperation::LastUse>(
+                frag_load_store, (source_row_ptr + i), true);
+            frag_sum = src_converter(frag_load_store);
+
+            if (hasProb)
+            {
+                frag_sum = frag_sum * s_prob[0];
+            }
+        }
+        else
+        {
+            frag_sum.clear();
         }
 
         for (int k = 1; k < num_topK; k++)
         {
             source_row = row_id_map[k * num_rows + source_token];
-            source_row_ptr = input + source_row * num_cols;
+
+            if (source_row == -1)
+                continue;
+
+            const T *source_row_ptr = input + source_row * num_cols;
 
             cutlass::arch::global_load<FragmentLoadStore, sizeof(FragmentLoadStore), cutlass::arch::CacheOperation::LastUse>(
                 frag_load_store, (source_row_ptr + i), true);
@@ -166,28 +186,31 @@ __global__ void moe_permute_topK_kernel(const T *input_bwd,
             int dest_row = row_id_map[index];
             index += num_rows;
 
-            if (hasProb)
+            if (dest_row != -1)
             {
-                frag_load_store = dst_converter(frag_src * s_prob[k]);
-            }
-            else
-            {
-                frag_load_store = dst_converter(frag_src);
-            }
-
-            T *dest_row_ptr = act_grad + dest_row * num_cols;
-            *(float4 *)(dest_row_ptr + i) = *(float4 *)(frag_load_store.data());
-
-            if (hasProb)
-            {
-                const T *input_fwd_ptr = input_fwd + dest_row * num_cols;
-                cutlass::arch::global_load<FragmentLoadStore, sizeof(FragmentLoadStore), cutlass::arch::CacheOperation::LastUse>(
-                    frag_load_store, (input_fwd_ptr + i), true);
-                FragmentCompute frag_input_fwd = src_converter(frag_load_store);
-
-                for (int e = 0; e < kElementsPerAccess; e++)
+                if (hasProb)
                 {
-                    accum[k] += float(frag_src.at(e) * frag_input_fwd.at(e));
+                    frag_load_store = dst_converter(frag_src * s_prob[k]);
+                }
+                else
+                {
+                    frag_load_store = dst_converter(frag_src);
+                }
+
+                T *dest_row_ptr = act_grad + dest_row * num_cols;
+                *(float4 *)(dest_row_ptr + i) = *(float4 *)(frag_load_store.data());
+
+                if (hasProb)
+                {
+                    const T *input_fwd_ptr = input_fwd + dest_row * num_cols;
+                    cutlass::arch::global_load<FragmentLoadStore, sizeof(FragmentLoadStore), cutlass::arch::CacheOperation::LastUse>(
+                        frag_load_store, (input_fwd_ptr + i), true);
+                    FragmentCompute frag_input_fwd = src_converter(frag_load_store);
+
+                    for (int e = 0; e < kElementsPerAccess; e++)
+                    {
+                        accum[k] += float(frag_src.at(e) * frag_input_fwd.at(e));
+                    }
                 }
             }
         }
@@ -226,6 +249,7 @@ void moe_permute_topK_kernel_launcher(
     const int num_rows,
     const int num_topK,
     const int num_cols,
+    const int num_out_tokens,
     cudaStream_t stream,
     float *prob_grad = nullptr,
     const T *input_fwd = nullptr)
@@ -241,7 +265,8 @@ void moe_permute_topK_kernel_launcher(
                 sorted_row_id,
                 row_id_map,
                 num_rows,
-                num_topK);
+                num_topK,
+                num_out_tokens);
 
             blocks = num_rows;
             threads = std::min(num_cols / kElementsPerAccess, 1024);

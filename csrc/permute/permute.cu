@@ -11,6 +11,7 @@ using torch::Tensor;
 std::tuple<Tensor, Tensor, std::vector<Tensor>> moe_permute_topK_op(
     Tensor              input,
     Tensor              indices,
+    int64_t             num_out_tokens,
     std::vector<Tensor> workspace,
     int64_t             max_expanded_token_num)
 {
@@ -57,8 +58,9 @@ std::tuple<Tensor, Tensor, std::vector<Tensor>> moe_permute_topK_op(
     const at::ScalarType _st = input.scalar_type();
 
     // Output buffer alloc
+    num_out_tokens = (num_out_tokens > 0) ? num_out_tokens : num_tokens * num_topK;
     Tensor permuted_output =
-        torch::empty({num_tokens * num_topK, num_cols}, torch::dtype(_st).device(torch::kCUDA).requires_grad(false));
+        torch::empty({num_out_tokens, num_cols}, torch::dtype(_st).device(torch::kCUDA).requires_grad(false));
     Tensor row_id_map = 
         torch::empty({num_tokens * num_topK}, torch::dtype(torch::kInt32).device(torch::kCUDA).requires_grad(false));
 
@@ -84,6 +86,7 @@ std::tuple<Tensor, Tensor, std::vector<Tensor>> moe_permute_topK_op(
             num_tokens,
             num_topK,
             num_cols,
+            num_out_tokens,
             stream);
 
         break;
@@ -105,6 +108,7 @@ std::tuple<Tensor, Tensor, std::vector<Tensor>> moe_permute_topK_op(
             num_tokens,
             num_topK,
             num_cols,
+            num_out_tokens,
             stream);
 
         break;
@@ -127,6 +131,7 @@ std::tuple<Tensor, Tensor, std::vector<Tensor>> moe_permute_topK_op(
             num_tokens,
             num_topK,
             num_cols,
+            num_out_tokens,
             stream);
 
         break;
@@ -150,6 +155,7 @@ std::tuple<Tensor, Tensor, std::vector<Tensor>> moe_permute_topK_op(
             num_tokens,
             num_topK,
             num_cols,
+            num_out_tokens,
             stream);
 
         break;
@@ -171,6 +177,7 @@ std::tuple<Tensor, Tensor, std::vector<Tensor>> moe_permute_topK_op(
             num_tokens,
             num_topK,
             num_cols,
+            num_out_tokens,
             stream);
 
         break;

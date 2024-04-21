@@ -15,61 +15,61 @@ except ImportError:
   sys.path.append("..")
   from ops import permute as permute_topK, unpermute as unpermute_topK
 
-def permute(tokens, indices, expand_factor: int = 1, is_fp8=False):
-    """Permute the tokens based on the indices.
-
+def permute(tokens, indices, num_out_tokens: int = 0):
+    """Permute the tokens based on the indices. Token with the same index will be grouped together.
+       The input indices shape is [tokens, top_k], it indicates which experts were selected by each token separately. 
     Args:
         tokens (torch.Tensor): The input token tensor.
-        indices (torch.Tensor): The token2expert indices tensor.
+        indices (torch.Tensor): The token to expert indices tensor, should have a shape of [num_tokens, topk].
+        topk (int, optional): The topk value. Defaults to 1.
+        num_out_tokens (int, optional): The effective token count, when enabling the capacity factor, should equal the number of tokens not dropped. By default, set to None, meaning no tokens are dropped.
 
     Returns:
         torch.Tensor: The permuted tensor.
+        torch.Tensor: The sorted_indices corresponding permuted tensor.
     """
-    expand_factor = indices.size(1)
 
+    topk = indices.size(1)
     flatten_indices = indices.view(-1)
     sorted_indices = torch.argsort(flatten_indices, stable=True)
-    permuted_tokens = tokens.index_select(0, sorted_indices // expand_factor)
+    if num_out_tokens > 0:
+        sorted_indices = sorted_indices[:num_out_tokens]
+    permuted_tokens = tokens.index_select(0, sorted_indices // topk)
     return permuted_tokens, sorted_indices
 
 
-def unpermute(permuted_tokens, sorted_indices, probs: torch.Tensor = None, merge_factor: int = 1):
-    """Unpermute the sorted tokens based on the indices.
-    
+def unpermute(
+    permuted_tokens: torch.Tensor,
+    sorted_indices: torch.Tensor,
+    probs: torch.Tensor = None,
+):
+    """Unpermute a tensor of permuted tokens based on sorted indices, and optionally merge the tokens with their corresponding probabilities.
+
     Args:
-        permuted_tokens (torch.Tensor): The permuted token tensor.
-        sorted_indices (torch.Tensor): The sorted indices tensor.
-        probs (torch.Tensor, optional): The probabilities tensor. Defaults to None.
-        merge_factor (int, optional): The merge factor. Defaults to 1.
+        permuted_tokens (torch.Tensor): The tensor of permuted tokens to be unpermuted.
+        sorted_indices (torch.Tensor): The tensor of sorted indices used to unpermute the tokens.
+        probs (torch.Tensor, optional): The tensor of probabilities corresponding to the permuted tokens. If provided, the unpermuted tokens will be merged with their respective probabilities.
 
     Returns:
-        torch.Tensor: The unpermuted tensor.
+        torch.Tensor: The unpermuted tokens, optionally merged with probabilities.
     """
-    merge_factor = probs.size(1)
+    num_unpermuted_tokens = probs.numel()
+    topk = probs.size(1)
 
-    if merge_factor > 1:
-        assert probs is not None
-        assert (
-            probs.size(0) == permuted_tokens.size(0) // merge_factor
-        ), f"{probs.size()} {permuted_tokens.size()}"
-    if probs is not None:
-        assert probs.size(0) == permuted_tokens.size(0) // merge_factor
-        assert (
-            probs.size(1) == merge_factor
-        ), f"probs size {probs.size()} merge_factor {merge_factor}"
-
-    # unpermuted_tokens = torch.zeros_like(permuted_tokens)
-    unpermuted_tokens = permuted_tokens.index_copy(0, sorted_indices, permuted_tokens)
-
-    unpermuted_tokens = unpermuted_tokens.reshape(-1, merge_factor, permuted_tokens.size(-1))
+    unpermuted_tokens = torch.zeros(
+        [num_unpermuted_tokens, permuted_tokens.shape[-1]],
+        dtype=permuted_tokens.dtype,
+        device=permuted_tokens.device,
+    )
+    unpermuted_tokens.index_copy_(0, sorted_indices, permuted_tokens)
+    unpermuted_tokens = unpermuted_tokens.reshape(-1, topk, permuted_tokens.size(-1))
 
     if probs is not None:
-        dtype = unpermuted_tokens.dtype
         unpermuted_tokens = unpermuted_tokens * probs.unsqueeze(-1)
-        unpermuted_tokens = unpermuted_tokens.to(dtype)
     unpermuted_tokens = unpermuted_tokens.sum(dim=1)
 
     return unpermuted_tokens
+
 
 def permute_topK_test(
     dtype,
@@ -77,9 +77,13 @@ def permute_topK_test(
     num_expert,
     hidden_size,
     num_topK,
-    PRINT,
-    BENCHMARK):
-    
+    num_out_tokens = None,
+    PRINT = False,
+    BENCHMARK = False):
+
+    if num_out_tokens == None:
+        num_out_tokens = num_token * num_topK
+
     print(f"{dtype} token:{num_token} hidden_size:{hidden_size} expert:{num_expert} topK:{num_topK}")
 
     is_fp8 = dtype in [torch.float8_e5m2, torch.float8_e4m3fn]
@@ -122,7 +126,7 @@ def permute_topK_test(
     #
     ###################################################################################################################################
     nvtx.range_push("PyTorch permute forward")
-    permute_output, sorted_indices = permute(permute_input, indices, num_topK, is_fp8)
+    permute_output, sorted_indices = permute(permute_input, indices, num_out_tokens)
     nvtx.range_pop()
 
     permute_bwd_input = torch.rand_like(permute_output)
@@ -138,7 +142,7 @@ def permute_topK_test(
     unpermute_input.requires_grad_(True)
 
     unpermute_output = unpermute(
-        unpermute_input, sorted_indices, probs=probs, merge_factor=num_topK)
+        unpermute_input, sorted_indices, probs=probs)
 
     if PRINT:
         print("--------------unpermute fwd permute_input--------------")
@@ -172,7 +176,7 @@ def permute_topK_test(
     new_unpermute_bwd_input = unpermute_bwd_input.detach().to(dtype)
     new_permute_input.requires_grad_(True)
 
-    new_permute_output, row_id_map = permute_topK(new_permute_input, indices)
+    new_permute_output, row_id_map = permute_topK(new_permute_input, indices, num_out_tokens)
 
     assert torch.allclose(permute_output.float(), new_permute_output.float())
 
@@ -251,9 +255,9 @@ def permute_topK_test(
 
     if BENCHMARK:
         print(f"----permute topK----")
-        t = perf_test_cuda_kernel(lambda: permute(permute_input, indices, 2))
+        t = perf_test_cuda_kernel(lambda: permute(permute_input, indices, num_out_tokens))
         print(f"pytorch fwd: {t:.3f} ms")
-        t = perf_test_cuda_kernel(lambda: permute_topK(new_permute_input, indices))
+        t = perf_test_cuda_kernel(lambda: permute_topK(new_permute_input, indices, num_out_tokens))
         print(f"new     fwd: {t:.3f} ms")
 
         t = perf_test_cuda_kernel(
@@ -265,7 +269,7 @@ def permute_topK_test(
 
         print(f"----unpermute topK----")
         t = perf_test_cuda_kernel(
-            lambda: unpermute(unpermute_input, sorted_indices, probs=probs, merge_factor=num_topK))
+            lambda: unpermute(unpermute_input, sorted_indices, probs=probs))
         print(f"pytorch fwd: {t:.3f} ms")
         t = perf_test_cuda_kernel(
             lambda: unpermute_topK(new_unpermute_input, row_id_map, new_probs))
@@ -310,32 +314,40 @@ def test_permute_topK():
     hidden_size = 4096
     num_topK = 1
 
+    num_out_tokens = num_token * num_topK - 20
+    # num_out_tokens = 0
+
     Benchmark = False
     print("GPU:", torch.cuda.get_device_name(0))
 
     dtype = torch.float32
     permute_topK_test(dtype, num_token, num_expert,
-                      hidden_size, num_topK, False, Benchmark)
+                      hidden_size, num_topK, num_out_tokens,
+                      False, Benchmark)
     dtype = torch.float16
     permute_topK_test(dtype, num_token, num_expert,
-                      hidden_size, num_topK, False, Benchmark)
+                      hidden_size, num_topK, num_out_tokens,
+                      False, Benchmark)
     dtype = torch.bfloat16
     permute_topK_test(dtype, num_token, num_expert,
-                      hidden_size, num_topK, False, Benchmark)
+                      hidden_size, num_topK, num_out_tokens,
+                      False, Benchmark)
     dtype = torch.float8_e5m2
     permute_topK_test(dtype, num_token, num_expert,
-                      hidden_size, num_topK, False, Benchmark)
+                      hidden_size, num_topK, num_out_tokens,
+                      False, Benchmark)
     dtype = torch.float8_e4m3fn
     permute_topK_test(dtype, num_token, num_expert,
-                      hidden_size, num_topK, False, Benchmark)
+                      hidden_size, num_topK, num_out_tokens,
+                      False, Benchmark)
     dtype = torch.bfloat16
-    permute_topK_test(dtype, num_token, 4, hidden_size, 1, False, Benchmark)
-    permute_topK_test(dtype, num_token, 5, hidden_size, 2, False, Benchmark)
-    permute_topK_test(dtype, num_token, 6, hidden_size, 3, False, Benchmark)
-    permute_topK_test(dtype, num_token, 7, hidden_size, 4, False, Benchmark)
-    permute_topK_test(dtype, num_token, 8, hidden_size, 5, False, Benchmark)
+    permute_topK_test(dtype, num_token, 4, hidden_size, 1, None, False, Benchmark)
+    permute_topK_test(dtype, num_token, 5, hidden_size, 2, None, False, Benchmark)
+    permute_topK_test(dtype, num_token, 6, hidden_size, 3, None, False, Benchmark)
+    permute_topK_test(dtype, num_token, 7, hidden_size, 4, None, False, Benchmark)
+    permute_topK_test(dtype, num_token, 8, hidden_size, 5, None, False, Benchmark)
     num_token = 0
-    permute_topK_test(dtype, num_token, 8, hidden_size, 5, False, Benchmark)
+    permute_topK_test(dtype, num_token, 8, hidden_size, 5, None, False, Benchmark)
 
 if __name__ == "__main__":
     test_permute_topK()

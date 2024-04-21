@@ -26,6 +26,7 @@ Tensor sinkhorn(Tensor cost, const double tol=0.0001);
 std::tuple<Tensor, Tensor, std::vector<Tensor>> moe_permute_topK_op(
     Tensor              input,
     Tensor              indices,
+    int64_t             num_out_tokens,
     std::vector<Tensor> workspace,
     int64_t             max_expanded_token_num);
 
