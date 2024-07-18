@@ -69,6 +69,8 @@ class PermuteMoE_topK(torch.autograd.Function):
       nvtx.range_push("permute_topK forward")
     # Empty input check
     if not input_act.numel():
+      if ENABLE_NVTX:
+        nvtx.range_pop()
       return input_act, None
 
     # For top1 case, view the indices as 2D tensor to unify the shape for topk>=2 cases.
@@ -133,6 +135,8 @@ class PermuteMoE_topK(torch.autograd.Function):
       nvtx.range_push("permute_topK backward")
     # Empty input check
     if not permuted_act_grad.numel():
+      if ENABLE_NVTX:
+        nvtx.range_pop()
       return permuted_act_grad, None, None, None
 
     if not permuted_act_grad.is_contiguous():
@@ -170,6 +174,8 @@ class UnpermuteMoE_topK(torch.autograd.Function):
     # Empty input check
     if not input_act.numel():
       ctx.probs = probs
+      if ENABLE_NVTX:
+        nvtx.range_pop()
       return input_act
 
     # Device check
@@ -229,6 +235,8 @@ class UnpermuteMoE_topK(torch.autograd.Function):
       nvtx.range_push("unpermute_topK backward")
     # Empty input check
     if not unpermuted_act_grad.numel():
+      if ENABLE_NVTX:
+        nvtx.range_pop()
       return unpermuted_act_grad, None, ctx.probs
 
     if not unpermuted_act_grad.is_contiguous():
