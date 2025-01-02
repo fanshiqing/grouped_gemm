@@ -37,6 +37,9 @@ if device_capability:
         f"-DGROUPED_GEMM_DEVICE_CAPABILITY={device_capability}",
     ])
 
+if "CUBLAS_VERSION" in os.environ:
+    nvcc_flags.append(f"-DCUBLAS_VERSION={os.environ['CUBLAS_VERSION']}")
+
 ext_modules = [
     CUDAExtension(
         "grouped_gemm_backend",
