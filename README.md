@@ -128,7 +128,7 @@ The mirror operator of `grouped_gemm.ops.permute`.
 
 ```py
 import torch
-from grouped_gemm import permute, unpermute
+from grouped_gemm.ops import permute, unpermute
 
 indices = torch.tensor([[1, 2], [0, 1], [0, 2], [1, 2]], dtype=torch.int32, device='cuda')
 input_act = torch.tensor([[0,0,0,0], [1,1,1,1], [2,2,2,2], [3,3,3,3]], dtype=torch.float32, device='cuda')
