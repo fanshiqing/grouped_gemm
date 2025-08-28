@@ -36,7 +36,7 @@ this_dir = os.path.dirname(os.path.abspath(__file__))
 
 
 BASE_WHEEL_URL = (
-    "https://github.com/ko3n1g/grouped_gemm/releases/download/{tag_name}/{wheel_name}"
+    "https://github.com/fanshiqing/grouped_gemm/releases/download/{tag_name}/{wheel_name}"
 )
 PACKAGE_NAME = "nv_grouped_gemm"
 
