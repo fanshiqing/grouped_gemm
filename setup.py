@@ -72,7 +72,10 @@ def get_wheel_url():
     python_version = f"cp{sys.version_info.major}{sys.version_info.minor}"
     platform_name = get_platform()
     grouped_gemm_version = get_package_version()
-    torch_version = f"{torch_version_raw.major}.{torch_version_raw.minor}"
+    if os.environ.get("NVIDIA_PRODUCT_NAME", "") == "PyTorch":
+        torch_version = str(os.environ.get("NVIDIA_PYTORCH_VERSION"))
+    else:
+        torch_version = f"{torch_version_raw.major}.{torch_version_raw.minor}"
     cxx11_abi = str(torch._C._GLIBCXX_USE_CXX11_ABI).upper()
 
     # Determine the version numbers that will be used to determine the correct wheel
@@ -81,9 +84,14 @@ def get_wheel_url():
     torch_cuda_version = parse(torch.version.cuda)
     # For CUDA 11, we only compile for CUDA 11.8, and for CUDA 12 we only compile for CUDA 12.3
     # to save CI time. Minor versions should be compatible.
-    torch_cuda_version = (
-        parse("11.8") if torch_cuda_version.major == 11 else parse("12.3")
-    )
+    if torch_cuda_version.major == 11:
+        torch_cuda_version = parse("11.8")
+    elif torch_cuda_version.major == 12:
+        torch_cuda_version = parse("12.3")
+    elif torch_cuda_version.major == 13:
+        torch_cuda_version = parse("13.0")
+    else:
+        raise ValueError(f"CUDA version {torch_cuda_version} not supported")
     # cuda_version = f"{cuda_version_raw.major}{cuda_version_raw.minor}"
     cuda_version = f"{torch_cuda_version.major}"
 
