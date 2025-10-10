@@ -12,8 +12,14 @@ export LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/cuda/lib64:$LD_LIBRARY
 
 # Limit MAX_JOBS otherwise the github runner goes OOM
 export MAX_JOBS=2 
+export GROUPED_GEMM_FORCE_BUILD="TRUE" 
 export NVCC_THREADS=2
-export TORCH_CUDA_ARCH_LIST="7.0 7.2 7.5 8.0 8.6 8.7 9.0+PTX"
+
+if [[ $WHEEL_CUDA_VERSION -lt 13 ]]; then
+    export TORCH_CUDA_ARCH_LIST="7.0 7.2 7.5 8.0 8.6 8.7 9.0+PTX"
+else
+    export TORCH_CUDA_ARCH_LIST="7.5 8.0 8.6 8.7 9.0+PTX"
+fi
 
 # 5h timeout since GH allows max 6h and we want some buffer
 EXIT_CODE=0

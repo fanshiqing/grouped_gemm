@@ -113,6 +113,11 @@ jobs:
             -e WHEEL_CUDA_VERSION=$WHEEL_CUDA_VERSION \
             -e MATRIX_PYTHON_VERSION=$MATRIX_PYTHON_VERSION \
             ${{ inputs.container-image }} bash /workspace/build-scripts/.github/scripts/build.sh | tail -n 1)
+            
+          # Store exit code in GitHub env for later steps
+          echo "build_exit_code=$EXIT_CODE" | tee -a "$GITHUB_OUTPUT"
+
+          exit $EXIT_CODE
 
       - name: Test wheels
         run: |
