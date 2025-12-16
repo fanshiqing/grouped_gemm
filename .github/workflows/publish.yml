@@ -41,19 +41,19 @@ jobs:
         # Using ubuntu-22.04 instead of 24.04 for more compatibility (glibc). Ideally we'd use the
         # manylinux docker image, but I haven't figured out how to install CUDA on manylinux.
         os: [ubuntu-22.04]
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-        torch-version: ["2.4.0", "2.5.1", "2.6.0", "2.7.1", "2.8.0"]
-        cuda-version: ["12.9.1"]
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+        torch-version: ['2.4.0', '2.5.1', '2.6.0', '2.7.1', '2.8.0']
+        cuda-version: ['12.9.1']
         # We need separate wheels that either uses C++11 ABI (-D_GLIBCXX_USE_CXX11_ABI) or not.
         # Pytorch wheels currently don't use it, but nvcr images have Pytorch compiled with C++11 ABI.
         # Without this we get import error (undefined symbol: _ZN3c105ErrorC2ENS_14SourceLocationESs)
         # when building without C++11 ABI and using it on nvcr images.
-        cxx11_abi: ["FALSE", "TRUE"]
+        cxx11_abi: ['FALSE', 'TRUE']
         exclude:
           # see https://github.com/pytorch/pytorch/blob/main/RELEASE.md#release-compatibility-matrix
           # Pytorch < 2.5 does not support Python 3.13
-          - torch-version: "2.4.0"
-            python-version: "3.13"
+          - torch-version: '2.4.0'
+            python-version: '3.13'
     uses: ./.github/workflows/_build.yml
     with:
       runs-on: ${{ matrix.os }}
@@ -101,7 +101,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: '3.10'
+          submodules: recursive
       - name: Install dependencies
         run: |
           pip install ninja packaging wheel twine
@@ -111,12 +112,12 @@ jobs:
           pip install torch --index-url https://download.pytorch.org/whl/cpu
       - name: Build core package
         env:
-          GROUPED_GEMM_SKIP_CUDA_BUILD: "TRUE"
+          GROUPED_GEMM_SKIP_CUDA_BUILD: 'TRUE'
         run: |
           python setup.py sdist --dist-dir=dist
       - name: Deploy
         env:
-          TWINE_USERNAME: "__token__"
+          TWINE_USERNAME: '__token__'
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
           python -m twine upload dist/*
