@@ -1,4 +1,4 @@
 import grouped_gemm.ops
 import grouped_gemm.backend
 
-__version__ = "1.1.4.post7"
+__version__ = "1.1.4.post8"
