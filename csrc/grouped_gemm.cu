@@ -1,8 +1,9 @@
 #include "grouped_gemm.h"
 
 #include <ATen/cuda/CUDAContext.h>
-#include <c10/util/BFloat16.h>
+#include <c10/cuda/CUDACachingAllocator.h>
 #include <c10/cuda/CUDAStream.h>
+#include <c10/util/BFloat16.h>
 #include <torch/extension.h>
 
 #include "cutlass/bfloat16.h"
@@ -229,6 +230,17 @@ inline void cublas_streams_wait_current(cudaStream_t stream)
     }
 }
 
+inline void cublas_record_tensor_streams(torch::Tensor tensor)
+{
+    for (int s = 0; s < NUM_STREAM; s++)
+    {
+        c10::cuda::CUDAStream ext_stream =
+            c10::cuda::getStreamFromExternal(cublas_stream[s], tensor.get_device());
+        c10::cuda::CUDACachingAllocator::recordStream(
+            tensor.storage().data_ptr(), ext_stream);
+    }
+}
+
 void CublasGemm(cublasHandle_t cublas_handle,
     c10::BFloat16 *a, int64_t a_rows, int64_t a_cols, bool trans_a,
 		c10::BFloat16 *b, int64_t b_rows, int64_t b_cols, bool trans_b,
@@ -270,6 +282,9 @@ void CublasGroupedGemm(torch::Tensor a,
   c10::BFloat16* c_ptr = c.data_ptr<c10::BFloat16>();
 
   cublas_streams_wait_current(c10::cuda::getCurrentCUDAStream());
+  cublas_record_tensor_streams(a);
+  cublas_record_tensor_streams(b);
+  cublas_record_tensor_streams(c);
 
   for (int i = 0; i < bs; ++i) {
 
@@ -298,6 +313,9 @@ void CublasGroupedGemmVariableK(torch::Tensor a,
   c10::BFloat16* c_ptr = c.data_ptr<c10::BFloat16>();
 
   cublas_streams_wait_current(c10::cuda::getCurrentCUDAStream());
+  cublas_record_tensor_streams(a);
+  cublas_record_tensor_streams(b);
+  cublas_record_tensor_streams(c);
 
   for (int i = 0; i < bs; ++i) {
     int64_t k = batch_sizes.data_ptr<int64_t>()[i];
